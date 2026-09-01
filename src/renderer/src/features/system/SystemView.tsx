@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FileCog, ListTree, Power, RefreshCw, RotateCcw, Save, Undo2 } from 'lucide-react'
-import type { NativeTuning, WslcSessionInfo } from '@shared/schemas'
+import { FileCog, FolderSearch, ListTree, Power, RefreshCw, RotateCcw, Save, Undo2 } from 'lucide-react'
+import type { NativeStatus, NativeTuning, WslcSessionInfo } from '@shared/schemas'
 import {
   Button,
   Cell,
@@ -26,6 +26,14 @@ import { confirmDialog } from '@/stores/confirm-store'
 import { useEngineStore } from '@/stores/engine-store'
 import { useEnvStore } from '@/stores/env-store'
 import { useNativeStore } from '@/stores/native-store'
+
+/** Rótulo de onde a DLL em uso saiu (nativeStatus.source). */
+const SDK_SOURCES: Record<NonNullable<NativeStatus['source']>, string> = {
+  bundled: 'empacotada com o app',
+  custom: 'escolhida por você',
+  system: 'instalação do WSL',
+  env: 'WSLC_SDK_DLL (ambiente)'
+}
 
 const LINKS = [
   {
@@ -115,6 +123,8 @@ export default function SystemView(): React.JSX.Element {
   const [vhdSizeMb, setVhdSizeMb] = useState('')
   const [gpu, setGpu] = useState(false)
   const [savingTuning, setSavingTuning] = useState(false)
+  const [sdkPath, setSdkPath] = useState<string | null>(null)
+  const [pickingSdk, setPickingSdk] = useState(false)
 
   const refreshSessions = useCallback((): void => {
     window.wslcApi
@@ -128,6 +138,10 @@ export default function SystemView(): React.JSX.Element {
     void loadEngine()
     refreshSessions()
     window.wslcApi
+      .sdkPath()
+      .then(setSdkPath)
+      .catch(() => setSdkPath(null))
+    window.wslcApi
       .getNativeTuning()
       .then((t: NativeTuning) => {
         setCpuCount(t.cpuCount ? String(t.cpuCount) : '')
@@ -137,6 +151,36 @@ export default function SystemView(): React.JSX.Element {
       })
       .catch(() => undefined)
   }, [refreshNative, loadEngine, refreshSessions])
+
+  /**
+   * Escolher outra wslcsdk.dll. A sonda roda ANTES de gravar: um arquivo que
+   * não é a DLL certa é recusado aqui, e não vira um motor nativo quebrado na
+   * próxima abertura.
+   */
+  const pickSdk = async (): Promise<void> => {
+    setPickingSdk(true)
+    try {
+      const probe = await window.wslcApi.pickSdk()
+      if (probe === null) return
+      if (!probe.ok) {
+        toast.danger(probe.detail)
+        return
+      }
+      await window.wslcApi.setSdkPath(probe.path)
+      setSdkPath(probe.path)
+      toast.success(`DLL ${probe.abi} escolhida. Reabra o app para passar a usá-la.`)
+    } catch (e) {
+      toast.danger(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPickingSdk(false)
+    }
+  }
+
+  const useBundledSdk = async (): Promise<void> => {
+    await window.wslcApi.setSdkPath(null)
+    setSdkPath(null)
+    toast.success('Voltando para a DLL empacotada. Reabra o app para aplicar.')
+  }
 
   const saveTuning = async (): Promise<void> => {
     const tuning: NativeTuning = {
@@ -312,11 +356,12 @@ export default function SystemView(): React.JSX.Element {
                   : 'criada na primeira operação'
                 : 'inativa'}
             </Fact>
-            <Fact label="SDK">
-              <Mono>{native?.sdkVersion ?? '-'}</Mono>
+            <Fact label="WSL (pelo SDK)">
+              <Mono>{native?.wslVersion ?? '-'}</Mono>
+              <Hint text="O SDK reporta a versão do WSL instalado, não a da própria DLL — binários diferentes respondem o mesmo número." />
             </Fact>
-            <Fact label="DLL">
-              <Mono className="block truncate text-muted">{native?.dllPath ?? '-'}</Mono>
+            <Fact label="ABI da DLL">
+              <Mono>{native?.abi ?? '-'}</Mono>
             </Fact>
             {native && native.missingComponents.length > 0 && (
               <Fact label="Faltando">{native.missingComponents.join(', ')}</Fact>
@@ -334,6 +379,53 @@ export default function SystemView(): React.JSX.Element {
             Como o SDK preview não permite reabrir handles, os containers nativos são removidos quando o app
             fecha. Build, save, export, stats e redes nomeadas só existem no motor CLI.
           </p>
+
+          <section className="mt-5 flex flex-col gap-4 border-t border-separator pt-5">
+            <SectionTitle description="O app vem com a DLL do SDK. Trocar só faz sentido para casar com um WSL diferente do esperado.">
+              wslcsdk.dll em uso
+            </SectionTitle>
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <Fact label="Origem">
+                {native?.source ? SDK_SOURCES[native.source] : '-'}
+                {sdkPath !== null && native?.source !== 'custom' && (
+                  <Hint text="Você escolheu outra DLL, mas ela só entra em uso quando o app reabrir." />
+                )}
+              </Fact>
+              <Fact label="Tamanho">
+                <Mono>{native?.sizeBytes ? `${(native.sizeBytes / 1024 / 1024).toFixed(1)} MB` : '-'}</Mono>
+              </Fact>
+              <div className="sm:col-span-2">
+                <Fact label="Caminho">
+                  <Mono className="block truncate text-muted">{native?.dllPath ?? '-'}</Mono>
+                </Fact>
+              </div>
+              {sdkPath !== null && (
+                <div className="sm:col-span-2">
+                  <Fact label="Escolhida">
+                    <Mono className="block truncate text-muted">{sdkPath}</Mono>
+                  </Fact>
+                </div>
+              )}
+            </dl>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button isDisabled={pickingSdk} size="sm" onPress={() => void pickSdk()}>
+                <FolderSearch className="size-4" />
+                {pickingSdk ? 'Verificando…' : 'Escolher outra DLL…'}
+              </Button>
+              {sdkPath !== null && (
+                <Button size="sm" variant="ghost" onPress={() => void useBundledSdk()}>
+                  <Undo2 className="size-4" />
+                  Usar a empacotada
+                </Button>
+              )}
+            </div>
+            <p className="max-w-[80ch] text-sm leading-relaxed text-muted">
+              A versão da DLL decide o que o motor nativo consegue fazer, e como o app precisa chamá-la: entre
+              a 2.9.3 e a 2.9.9 duas funções mudaram de assinatura sem mudar nada visível. O app detecta isso
+              sozinho pela ABI e se adapta — mas a troca só vale ao reabrir, porque a sessão nativa viva
+              segura handles da DLL atual.
+            </p>
+          </section>
 
           <section className="mt-5 flex flex-col gap-4 border-t border-separator pt-5">
             <SectionTitle description="Limites da VM da sessão “WslcUi”. Campo vazio usa o padrão do WSL.">

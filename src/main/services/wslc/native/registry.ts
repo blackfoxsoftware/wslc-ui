@@ -100,6 +100,9 @@ export async function loginNativeRegistry(
     const { sdk, handle: session } = await acquireNativeSession()
     const tokenOut: (string | null)[] = [null]
     const errOut: (string | null)[] = [null]
+    // A ABI 2.9.9 encaixou `tokenType` entre o token e o errorMessage; sem este
+    // desvio, a DLL nova escreveria o enum onde mora o ponteiro de erro.
+    const tokenTypeOut = [0]
     const hr = await callNative(
       sdk.raw['WslcSessionAuthenticate'],
       session,
@@ -107,6 +110,7 @@ export async function loginNativeRegistry(
       keep.ansi(username),
       keep.ansi(password),
       tokenOut,
+      ...(sdk.abi.modern ? [tokenTypeOut] : []),
       errOut
     )
     if (!hrOk(hr)) {

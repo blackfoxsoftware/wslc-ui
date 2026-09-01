@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { clearLogEntries, getLogEntries, logsDirectory, setOnLogEntry } from '../services/logger'
-import { readNativeTuning, settingsFilePath, writeNativeTuning } from '../settings'
+import { readNativeTuning, readSdkPath, settingsFilePath, writeNativeTuning, writeSdkPath } from '../settings'
 import { resolveWslcService } from '../services/wslc'
 import { currentEngine, getEngineStatus, setEngine } from '../services/wslc/engine'
 import { ops } from '../services/wslc/ops'
@@ -19,6 +19,11 @@ export function registerIpc(): void {
 
   // Tuning persistido da sessão nativa → aplicado quando a sessão for criada.
   native.setTuning(readNativeTuning(settingsFile()))
+
+  // DLL escolhida na aba Sistema. Injetada ANTES de qualquer consulta ao motor
+  // nativo — é por isso que trocar de DLL só vale ao reabrir o app: quem já
+  // carregou a anterior tem handles dela.
+  native.setSdkPath(readSdkPath(settingsFile()))
 
   // Sessão nativa terminou por fora (WSL desligado/crash) → avisa todas as janelas.
   native.setOnSessionEnded((reason) => {
@@ -174,6 +179,18 @@ export function registerIpc(): void {
       native.setTuning(tuning)
     },
     'system:restart-native': () => native.restartSession(),
+    'system:sdk-path': () => native.getSdkPath(),
+    // Escolher a DLL é: diálogo -> sonda -> grava. A sonda é a parte que
+    // importa: sem ela a pessoa só descobriria que errou o arquivo na próxima
+    // vez que abrisse o app, com o motor nativo indisponível e sem pista.
+    'system:pick-sdk': async (_input, { event }) => {
+      const picked = await host.pickFile(BrowserWindow.fromWebContents(event.sender), 'wslcsdk.dll', ['dll'])
+      return picked === null ? null : native.probeSdk(picked)
+    },
+    'system:set-sdk-path': ({ path }) => {
+      writeSdkPath(settingsFile(), path)
+      native.setSdkPath(path)
+    },
     'system:native-status': () => native.status(),
     'system:get-engine': () => getEngineStatus(),
     'system:set-engine': ({ engine }) => setEngine(engine),

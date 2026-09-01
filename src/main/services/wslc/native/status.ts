@@ -1,6 +1,7 @@
+import { statSync } from 'node:fs'
 import type { NativeStatus } from '@shared/schemas'
 import { hrHex, loadWslcSdk, WSLC_COMPONENT_FLAGS } from './bindings'
-import { locateWslcSdk } from './locate'
+import { locateSdk } from './locate'
 
 /** Nomes amigáveis dos componentes que podem faltar. */
 export function missingComponentNames(flags: number): string[] {
@@ -11,18 +12,30 @@ export function missingComponentNames(flags: number): string[] {
   return names
 }
 
-/** Sonda a API nativa (wslcsdk.dll): presença, versão do SDK e componentes. */
+function fileSize(path: string): number | null {
+  try {
+    return statSync(path).size
+  } catch {
+    return null
+  }
+}
+
+/** Sonda a API nativa (wslcsdk.dll): presença, origem, ABI e componentes. */
 export function getNativeStatus(): NativeStatus {
-  const dllPath = locateWslcSdk()
-  if (!dllPath) {
+  const found = locateSdk()
+  if (!found) {
     return {
       available: false,
       dllPath: null,
-      sdkVersion: null,
+      source: null,
+      wslVersion: null,
+      abi: null,
+      sizeBytes: null,
       missingComponents: [],
-      detail: 'wslcsdk.dll não encontrada (vendor/wslcsdk ou C:\\Program Files\\WSL).'
+      detail: 'wslcsdk.dll não encontrada (empacotada com o app ou C:\\Program Files\\WSL).'
     }
   }
+  const { path: dllPath, source } = found
   try {
     const sdk = loadWslcSdk(dllPath)
     const version = sdk.version()
@@ -31,7 +44,10 @@ export function getNativeStatus(): NativeStatus {
     return {
       available: true,
       dllPath,
-      sdkVersion: `${version.major}.${version.minor}.${version.revision}`,
+      source,
+      wslVersion: `${version.major}.${version.minor}.${version.revision}`,
+      abi: sdk.abi.label,
+      sizeBytes: fileSize(dllPath),
       missingComponents: missing,
       detail:
         missing.length === 0
@@ -42,7 +58,10 @@ export function getNativeStatus(): NativeStatus {
     return {
       available: false,
       dllPath,
-      sdkVersion: null,
+      source,
+      wslVersion: null,
+      abi: null,
+      sizeBytes: fileSize(dllPath),
       missingComponents: [],
       detail: `Falha ao carregar/consultar o SDK: ${e instanceof Error ? e.message : hrHex(Number(e))}`
     }

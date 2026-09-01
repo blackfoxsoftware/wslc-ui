@@ -62,10 +62,16 @@ export function installWslcApiMock(overrides: Partial<WslcApi> = {}): WslcApi {
     getNativeTuning: vi.fn(async () => ({})),
     setNativeTuning: vi.fn(async () => undefined),
     restartNativeSession: vi.fn(async () => okResult()),
+    sdkPath: vi.fn(async () => null),
+    pickSdk: vi.fn(async () => null),
+    setSdkPath: vi.fn(async () => undefined),
     getNativeStatus: vi.fn(async () => ({
       available: false,
       dllPath: null,
-      sdkVersion: null,
+      source: null,
+      wslVersion: null,
+      abi: null,
+      sizeBytes: null,
       missingComponents: [],
       detail: 'mock'
     })),

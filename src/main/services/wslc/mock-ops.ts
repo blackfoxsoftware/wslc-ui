@@ -11,6 +11,7 @@ import type {
   NativeTuning,
   RegistryImage,
   RunContainerOptions,
+  SdkProbe,
   VhdVolumeOptions,
   VolumeInfo
 } from '@shared/schemas'
@@ -194,6 +195,9 @@ const world: NativeWorld = {
 let onEnded: (reason: NativeSessionEndedEvent['reason']) => void = () => {}
 let onCrash: (ev: NativeCrashDumpEvent) => void = () => {}
 
+/** DLL escolhida na aba Sistema; null = a "empacotada" do modo demonstração. */
+let mockSdkPath: string | null = null
+
 const findContainer = (id: string): ContainerInfo | undefined =>
   world.containers.find((c) => c.id === id || c.name === id)
 
@@ -264,17 +268,57 @@ const nativeOps: NativeOps = {
       ? {
           available: false,
           dllPath: null,
-          sdkVersion: null,
+          source: null,
+          wslVersion: null,
+          abi: null,
+          sizeBytes: null,
           missingComponents: ['Virtual Machine Platform'],
           detail: '(demo) wslcsdk.dll não encontrada nesta máquina.'
         }
       : {
           available: true,
-          dllPath: 'C:\\demo\\vendor\\wslcsdk\\wslcsdk.dll',
-          sdkVersion: '0.9.0',
+          dllPath: mockSdkPath ?? 'C:\\demo\\vendor\\wslcsdk\\win-x64\\wslcsdk.dll',
+          source: mockSdkPath === null ? 'bundled' : 'custom',
+          wslVersion: '0.9.0',
+          abi: '2.9.9+',
+          sizeBytes: 4_929_888,
           missingComponents: [],
           detail: '(demo) SDK simulado carregado; todos os componentes presentes.'
         },
+  getSdkPath: () => mockSdkPath,
+  setSdkPath: (path: string | null) => {
+    mockSdkPath = path
+  },
+  // A sonda dublada lê o NOME do arquivo: um caminho com "2.9.3" devolve a ABI
+  // antiga, e qualquer coisa que não termine em .dll é recusada. É o bastante
+  // para o E2E exercitar escolher, recusar e voltar para a empacotada.
+  probeSdk: (path: string): SdkProbe => {
+    if (!path.toLowerCase().endsWith('.dll')) {
+      return {
+        path,
+        ok: false,
+        wslVersion: null,
+        abi: null,
+        sizeBytes: null,
+        sha256: null,
+        missingComponents: [],
+        detail: '(demo) Não é uma wslcsdk.dll utilizável: assinatura não reconhecida.'
+      }
+    }
+    const antiga = path.includes('2.9.3')
+    return {
+      path,
+      ok: true,
+      wslVersion: '0.9.0',
+      abi: antiga ? '2.9.3' : '2.9.9+',
+      sizeBytes: antiga ? 5_406_520 : 4_929_888,
+      sha256: antiga
+        ? 'a3881e7d239be9944a64868c323046aa0292d4806c289cb31c50c8df8d5dc68d'
+        : '8d4d55d4283fb32a5909b57e78b576d01363d7b28bb9b2595115e80faf61db5b',
+      missingComponents: [],
+      detail: `(demo) DLL válida, ABI ${antiga ? '2.9.3' : '2.9.9+'}.`
+    }
+  },
   install: async (onProgress: (ev: InstallProgressEvent) => void) => {
     const ms = tickMs()
     const components = ['Virtual Machine Platform', 'Pacote WSL']

@@ -22,6 +22,15 @@ export default defineConfig({
         }
       },
       {
+        // Ferramentas de repositório (scripts/): não são código do app, mas o
+        // release depende delas, então correm no mesmo `npm test`.
+        test: {
+          name: 'ferramentas',
+          environment: 'node',
+          include: ['scripts/**/*.test.ts']
+        }
+      },
+      {
         plugins: [react()],
         test: {
           name: 'renderer',

@@ -1,0 +1,26 @@
+{
+  "versoes": [
+    {
+      "versao": "0.1.0",
+      "data": "2026-09-01",
+      "titulo": "Primeira versão pública: a superfície do wslc 2.9.4 inteira, nos dois motores.",
+      "mudancas": {
+        "adicionado": [
+          "UI desktop para o WSL container (wslc) em Electron + Vite + React 19, com contrato IPC tipado com Zod nas duas direções.",
+          "Dois motores intercambiáveis em tempo de execução: a CLI `wslc.exe` e o SDK nativo (Microsoft.WSL.Containers via koffi/FFI).",
+          "Containers: executar (portas, volumes, env, labels, limites, healthcheck, hostname/domínio, workdir e entrypoint), start/stop/restart/kill/remover, detalhes, logs, exec, stats e prune.",
+          "Imagens: pull e push com progresso por camada e cancelamento, tag, load/import/export, catálogo de imagens base e login/logout em registry.",
+          "Volumes em VHDX com tamanho, tipo e dono, mais inspeção do volume.",
+          "Redes: criar, conectar e desconectar containers, e prune.",
+          "Sessões do wslc: listagem, tuning da sessão nativa (CPU, memória, disco e GPU) e troca de motor persistida entre execuções.",
+          "Terminal embutido (xterm) nos dois motores, em modo linha — o SDK em preview não expõe PTY.",
+          "Crash dumps do motor nativo e instalação guiada para máquinas sem o WSL/wslc.",
+          "Painel de logs ao vivo com filtro, e configuração do app persistida em disco.",
+          "Design system próprio sobre HeroUI v3 e Tailwind v4.",
+          "Motor de demonstração (`WSLC_UI_MOCK`) com injeção de falha por canal, que sustenta a suíte E2E nos dois motores sem tocar no WSL.",
+          "CI com typecheck, lint, formatação, testes de unidade e E2E, e release por tag gerado a partir deste arquivo."
+        ]
+      }
+    }
+  ]
+}

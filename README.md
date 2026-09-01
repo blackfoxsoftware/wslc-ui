@@ -402,6 +402,24 @@ Duas branches, e uma regra que o CI cobra:
 Uma PR aberta contra a `main` a partir de qualquer coisa que não seja a `dev` falha no job _Alvo da
 PR_. A intenção é que a `main` só ande junto com uma tag.
 
+### O que o GitHub cobra (rulesets)
+
+O fluxo acima não é convenção: está aplicado no repositório, em três rulesets.
+
+| Ruleset                                 | Alvo              | Cobra                                                                                                                                                                                                                         |
+| --------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main: entra pela dev, com CI verde`    | `refs/heads/main` | PR obrigatória (nada de push direto), _Alvo da PR_ + _Verificações_ + _E2E_ verdes, conversas resolvidas, review desfeito a cada push novo, merge **só por merge commit** — é o que faz a `main` guardar o histórico da `dev` |
+| `dev: sem force-push, CI verde nas PRs` | `refs/heads/dev`  | _Verificações_ e _E2E_ verdes para entrar por PR. Push direto continua liberado, para iterar                                                                                                                                  |
+| `tags de versão: imutáveis`             | `refs/tags/v*`    | Tag de release não se move e não se apaga: o que foi publicado fica publicado                                                                                                                                                 |
+
+As duas branches também estão protegidas contra force-push e contra remoção. Nenhum ruleset tem
+exceção de bypass, nem para o dono do repositório — a `main` anda por PR e ponto. E nenhum deles
+atrapalha o release: o workflow **cria** a tag, e criar não é mover nem apagar.
+
+Não há aprovação obrigatória (`0` reviews), senão um mantenedor solo não conseguiria fechar a própria
+PR; o que segura de verdade é o CI verde. Branch de trabalho é apagada automaticamente no merge — a
+`dev` sobrevive porque o ruleset dela proíbe remoção.
+
 ### CI (`.github/workflows/ci.yml`)
 
 Roda em toda PR (para `dev` e para `main`) e em todo push na `dev`, em `windows-latest` — o alvo é

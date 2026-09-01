@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": false,
+  "singleQuote": true,
+  "printWidth": 110,
+  "trailingComma": "none",
+  "ignorePatterns": [
+    "out/**",
+    "coverage/**",
+    "test-results/**",
+    "playwright-report/**",
+    "src/renderer/src/routeTree.gen.ts"
+  ]
+}

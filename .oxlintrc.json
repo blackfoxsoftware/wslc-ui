@@ -1,0 +1,52 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "env": {
+    "es2024": true
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off"
+  },
+  "ignorePatterns": [
+    "out",
+    "coverage",
+    "node_modules",
+    "test-results",
+    "playwright-report",
+    "src/renderer/src/routeTree.gen.ts"
+  ],
+  "overrides": [
+    {
+      "files": ["src/renderer/**"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": ["src/main/**", "src/preload/**", "*.config.ts"],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "src/renderer/src/test/**"],
+      "env": {
+        "browser": true,
+        "node": true
+      }
+    },
+    {
+      "files": ["e2e/**"],
+      "env": {
+        "browser": true,
+        "node": true
+      }
+    }
+  ]
+}

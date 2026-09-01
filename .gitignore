@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+coverage/
+*.log
+.DS_Store
+test-results/
+playwright-report/
+
+# Artefatos de build incremental do TypeScript / TanStack Router
+*.tsbuildinfo
+.tanstack/
+
+# SDK da Microsoft vendorizado — não redistribuído aqui.
+# Baixe o .nupkg Microsoft.WSL.Containers: ver vendor/wslcsdk/README.md
+vendor/wslcsdk/include/
+vendor/wslcsdk/win-x64/

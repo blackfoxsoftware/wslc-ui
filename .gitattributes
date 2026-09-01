@@ -1,0 +1,8 @@
+# Normaliza tudo para LF no repositório e no checkout — o oxfmt formata em LF.
+* text=auto eol=lf
+
+# Binários
+*.dll binary
+*.png binary
+*.ico binary
+*.vhdx binary

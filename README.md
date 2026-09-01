@@ -353,9 +353,10 @@ Quatro variáveis afinam o dublê (`mock-state.ts`), e é com elas que o E2E tes
 
 ## Testes
 
-Dois projetos Vitest (`vitest.config.ts`):
+Três projetos Vitest (`vitest.config.ts`):
 
 - **main** (ambiente node): parser de tabelas, versões, decodificação, argumentos de run, mock service, streams (processos reais), router IPC (validação Zod nas duas direções) e schemas/contrato.
+- **ferramentas** (node): o validador e o gerador de notas do `patchnotes.json` (`scripts/`).
 - **renderer** (happy-dom + Testing Library): stores zustand (stream, containers, volumes, env), hooks (usePolling) e componentes (RunDialog, ContainersView, SetupView) com `window.wslcApi` mockado. As stores são restauradas ao estado inicial entre testes (`test/setup.ts`).
 
 ### E2E (Playwright + Electron)
@@ -401,6 +402,10 @@ Duas branches, e uma regra que o CI cobra:
 
 Uma PR aberta contra a `main` a partir de qualquer coisa que não seja a `dev` falha no job _Alvo da
 PR_. A intenção é que a `main` só ande junto com uma tag.
+
+Quem vai mexer no código: o [CONTRIBUTING.md](CONTRIBUTING.md) tem ambiente, convenções e o que
+rodar antes de abrir a PR. O projeto adota o [Código de Conduta](CODE_OF_CONDUCT.md), e falha de
+segurança segue o [SECURITY.md](SECURITY.md) — nunca por issue pública.
 
 ### O que o GitHub cobra (rulesets)
 

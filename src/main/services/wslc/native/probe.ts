@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import type { SdkProbe } from '@shared/schemas'
-import { probeWslcSdk } from './bindings'
+import { HR_SDK_UPDATE_NEEDED, probeWslcSdk } from './bindings'
 import { missingComponentNames } from './status'
 
 /**
@@ -65,7 +65,9 @@ export function probeSdkFile(path: string): SdkProbe {
       ...base,
       sizeBytes,
       sha256,
-      detail: `Não é uma wslcsdk.dll utilizável: ${e instanceof Error ? e.message : String(e)}`
+      detail: (e instanceof Error ? e.message : String(e)).includes(HR_SDK_UPDATE_NEEDED)
+        ? 'Esta DLL é antiga demais para o WSL instalado (WSLC_E_SDK_UPDATE_NEEDED).'
+        : `Não é uma wslcsdk.dll utilizável: ${e instanceof Error ? e.message : String(e)}`
     }
   } finally {
     // Não deixa a candidata carregada no processo; a em uso é preservada

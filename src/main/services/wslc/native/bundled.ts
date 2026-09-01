@@ -5,18 +5,22 @@ import { probeWslcSdk } from './bindings'
 /**
  * Qual wslcsdk.dll empacotada usar — decidido pela versão do WSL instalado.
  *
- * O app leva DUAS DLLs porque a versão do SDK precisa acompanhar a do WSL, e
- * isso foi medido, não suposto: com WSL 2.9.4, o SDK 2.9.9 cria a sessão,
- * lista imagens… e então dá **segmentation fault** em
- * `WslcGetSessionTerminationEvent`. A declaração dessa função é byte a byte
- * idêntica nas duas versões, e os 18 structs também — ou seja, não há como o
- * app se defender por binding. O SDK novo simplesmente conversa com um
- * wslservice mais velho do que ele espera, e o processo morre.
+ * O app leva DUAS DLLs porque o SDK precisa CASAR com o WSL — nas duas
+ * direções, e ambas medidas nesta máquina:
  *
- * A regra, então, é conservadora: usa a DLL mais nova que **não passe** da
- * versão do WSL instalado. Com WSL 2.9.4 isso dá a 2.9.3; com WSL 2.9.9 ou
- * mais, a 2.9.9, que traz `WslcOpenContainer` e as assinaturas novas (ver
- * SdkAbi).
+ * | | WSL 2.9.4 | WSL 2.9.9 |
+ * | SDK 2.9.3 | funciona | `WSLC_E_SDK_UPDATE_NEEDED` já no WslcGetVersion |
+ * | SDK 2.9.9 | segfault em WslcGetSessionTerminationEvent | funciona |
+ *
+ * SDK novo demais é o caso perigoso: nada no header denuncia: a declaração da
+ * função que quebra é byte a byte idêntica nas duas versões, e os 18 structs
+ * também. Não há binding que se defenda — o processo simplesmente morre. SDK
+ * velho demais é o caso educado: o serviço recusa toda chamada com um HRESULT
+ * legível.
+ *
+ * A regra: usa a DLL mais nova que **não passe** da versão do WSL instalado.
+ * Com WSL 2.9.4 isso dá a 2.9.3; com 2.9.9 ou mais, a 2.9.9, que traz
+ * `WslcOpenContainer` e as assinaturas novas (ver SdkAbi).
  *
  * Quem quiser fugir da regra escolhe a DLL na aba Sistema — e a detecção de
  * ABI cuida do resto.
@@ -72,13 +76,18 @@ export function bundledPath(sdk: BundledSdk, root: string): string {
 let detected: string | null | undefined
 
 /**
- * Versão do WSL instalado, perguntada à DLL empacotada mais ANTIGA.
+ * Versão do WSL instalado, perguntada à DLL empacotada mais NOVA que responder.
  *
- * Parece circular — carregar uma DLL para decidir qual DLL usar — mas não é: a
- * mais antiga é justamente a que funciona em qualquer WSL suportado, e
- * `WslcGetVersion` responde a versão do WSL, não a dela própria. É uma chamada
- * barata, sem sessão, e é o único jeito de saber a versão sem depender do
- * `wsl.exe` estar no PATH.
+ * Parece circular — carregar uma DLL para decidir qual DLL usar — mas não é.
+ * `WslcGetVersion` devolve a versão do WSL, não a da DLL, não abre sessão e é
+ * barato. O detalhe que importa é a ORDEM: da mais nova para a mais antiga.
+ *
+ * A primeira tentativa foi ao contrário, e a medição derrubou: num WSL 2.9.9, a
+ * DLL 2.9.3 recusa até o WslcGetVersion, com WSLC_E_SDK_UPDATE_NEEDED — perguntar
+ * à mais velha dava "não sei", caía na mais velha por precaução, e o app inteiro
+ * ficava sem motor nativo. A mais nova, ao contrário, responde a versão certa
+ * mesmo num WSL antigo (medido: a 2.9.9 respondeu 2.9.4 num WSL 2.9.4); ela só
+ * quebra depois, ao mexer na sessão — e é justamente disso que a regra protege.
  */
 export function detectWslVersion(
   roots: string[],
@@ -86,19 +95,20 @@ export function detectWslVersion(
 ): string | null {
   if (detected !== undefined) return detected
   detected = null
-  const base = BUNDLED_SDKS[0] as BundledSdk
-  for (const root of roots) {
-    const path = bundledPath(base, root)
-    if (!exists(path)) continue
-    try {
-      const probe = probeWslcSdk(path)
-      const v = probe.sdk.version()
-      detected = `${v.major}.${v.minor}.${v.revision}`
-      probe.unload()
-    } catch {
-      // DLL base ausente ou ilegível: segue com null (cai na mais antiga).
+  for (const sdk of BUNDLED_SDKS.toReversed()) {
+    for (const root of roots) {
+      const path = bundledPath(sdk, root)
+      if (!exists(path)) continue
+      try {
+        const probe = probeWslcSdk(path)
+        const v = probe.sdk.version()
+        detected = `${v.major}.${v.minor}.${v.revision}`
+        probe.unload()
+      } catch {
+        // Esta DLL não fala com este WSL; tenta a próxima.
+      }
+      if (detected !== null) return detected
     }
-    break
   }
   return detected
 }

@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import type { NativeStatus } from '@shared/schemas'
-import { hrHex, loadWslcSdk, WSLC_COMPONENT_FLAGS } from './bindings'
+import { HR_SDK_UPDATE_NEEDED, hrHex, loadWslcSdk, WSLC_COMPONENT_FLAGS } from './bindings'
 import { locateSdk } from './locate'
 
 /** Nomes amigáveis dos componentes que podem faltar. */
@@ -18,6 +18,23 @@ function fileSize(path: string): number | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Mensagem acionável para uma DLL que não serve a este WSL.
+ *
+ * O caso comum não é arquivo corrompido: é versão trocada. Dizer só
+ * "0x8004060B" manda a pessoa pesquisar; dizer o que fazer resolve.
+ */
+function sdkFailureDetail(e: unknown): string {
+  const msg = e instanceof Error ? e.message : hrHex(Number(e))
+  if (msg.includes(HR_SDK_UPDATE_NEEDED)) {
+    return (
+      'Esta wslcsdk.dll é antiga demais para o WSL instalado (WSLC_E_SDK_UPDATE_NEEDED). ' +
+      'Atualize o WSL, ou escolha outra DLL aqui em Sistema.'
+    )
+  }
+  return `Falha ao carregar/consultar o SDK: ${msg}`
 }
 
 /** Sonda a API nativa (wslcsdk.dll): presença, origem, ABI e componentes. */
@@ -63,7 +80,7 @@ export function getNativeStatus(): NativeStatus {
       abi: null,
       sizeBytes: fileSize(dllPath),
       missingComponents: [],
-      detail: `Falha ao carregar/consultar o SDK: ${e instanceof Error ? e.message : hrHex(Number(e))}`
+      detail: sdkFailureDetail(e)
     }
   }
 }

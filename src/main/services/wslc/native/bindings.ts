@@ -23,6 +23,12 @@ export const WSLC_COMPONENT_FLAGS = {
   SDK_NEEDS_UPDATE: 4
 } as const
 
+/**
+ * O serviço recusou a DLL por ser velha demais para o WSL instalado. Chega em
+ * QUALQUER chamada, inclusive WslcGetVersion — ver bundled.ts.
+ */
+export const HR_SDK_UPDATE_NEEDED = '0x8004060B'
+
 /** WslcInstallOptions — só existe na ABI 2.9.9+. REPAIR reinstala o que já está lá. */
 export const WSLC_INSTALL_OPTIONS = {
   NONE: 0,

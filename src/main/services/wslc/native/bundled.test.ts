@@ -42,7 +42,7 @@ describe('pickBundledSdk', () => {
 describe('BUNDLED_SDKS', () => {
   it('está ordenada da mais antiga para a mais nova', () => {
     const versoes = BUNDLED_SDKS.map((s) => s.version)
-    expect([...versoes].sort(compareVersions)).toEqual(versoes)
+    expect(versoes.toSorted(compareVersions)).toEqual(versoes)
   })
 
   it('aponta para dentro de vendor/, por versão', () => {

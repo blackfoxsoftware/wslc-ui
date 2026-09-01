@@ -1,0 +1,58 @@
+name: Ideia ou melhoria
+description: Algo que o app poderia fazer
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Duas coisas que economizam o tempo de todo mundo:
+
+        - Mudança grande vale conversar aqui **antes** de virar PR.
+        - A UI só consegue expor o que o `wslc` (CLI) ou o SDK expõem. O que os dois não têm, ela não
+          inventa — a cobertura atual está no [README](https://github.com/blackfoxsoftware/wslc-ui#cobertura-da-cli-wslc).
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Que problema isso resolve
+      description: O incômodo concreto, não a solução. É a parte que mais ajuda.
+    validations:
+      required: true
+
+  - type: textarea
+    id: ideia
+    attributes:
+      label: O que você imagina
+      description: Se já tem uma ideia de como seria na tela, descreva. Rascunho e captura são bem-vindos.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Onde isso encaixa
+      options:
+        - Containers
+        - Imagens
+        - Volumes
+        - Redes
+        - Sessões / Sistema
+        - Terminal
+        - Logs
+        - Instalação / primeiro uso
+        - Outro
+    validations:
+      required: true
+
+  - type: dropdown
+    id: suporte
+    attributes:
+      label: O wslc já suporta isso?
+      description: Vale conferir em `wslc --help` ou no `wslcsdk.h`.
+      options:
+        - Sim, a CLI faz
+        - Sim, o SDK faz
+        - Não, precisaria de mudança no wslc
+        - Não sei
+    validations:
+      required: true

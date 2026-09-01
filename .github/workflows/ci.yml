@@ -1,0 +1,102 @@
+# Verificações de todo push na dev e de toda PR.
+#
+# Tudo roda em windows-latest porque o alvo é Windows: os testes lidam com
+# caminhos do Windows e o E2E sobe o Electron de verdade. Os testes de
+# integração FFI se auto-desligam aqui (`describe.skipIf(locateWslcSdk() ===
+# null)`) — a wslcsdk.dll da Microsoft não é versionada, e nenhum runner tem
+# WSL, então sobra exatamente a parte que faz sentido validar fora da máquina.
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Cancelar só vale para PR (push novo aposenta o run anterior). No release este
+# workflow é chamado pelo Release: cancelar ali abortaria a publicação.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  alvo:
+    name: Alvo da PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: PR para a main só pode vir da dev
+        if: github.base_ref == 'main' && github.head_ref != 'dev'
+        run: |
+          echo "::error::Toda PR entra na dev primeiro. A main recebe apenas o merge da dev, que é o que dispara o release."
+          exit 1
+
+  verificacoes:
+    name: Verificações
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # O npm bloqueia scripts de instalação por padrão; o `allowScripts` do
+      # package.json libera os aprovados, mas se o download do Electron não
+      # tiver acontecido nada que importe `electron` sobe.
+      - name: Garantir o binário do Electron
+        shell: pwsh
+        run: |
+          if (-not (Test-Path node_modules/electron/dist/electron.exe)) {
+            node node_modules/electron/install.js
+          }
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - name: Notas da versão (patchnotes.json)
+        run: npm run patchnotes
+
+  e2e:
+    name: E2E
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Garantir o binário do Electron
+        shell: pwsh
+        run: |
+          if (-not (Test-Path node_modules/electron/dist/electron.exe)) {
+            node node_modules/electron/install.js
+          }
+
+      - run: npm run build
+
+      # Sem `playwright install`: não há navegador no caminho — `_electron.launch`
+      # usa o Electron que já está em node_modules.
+      - name: Playwright (app Electron, modo demonstração)
+        run: npx playwright test
+
+      - name: Relatório do Playwright
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+          if-no-files-found: ignore

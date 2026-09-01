@@ -274,7 +274,8 @@ npm run lint           # oxlint (lint:fix para autocorrigir)
 npm run format         # oxfmt (format:check no CI)
 npm test               # vitest (test:watch, test:coverage)
 npm run test:e2e       # build + Playwright contra o app Electron (e2e/)
-npm run check          # typecheck + lint + format:check + test
+npm run check          # typecheck + lint + format:check + test + patchnotes
+npm run patchnotes     # valida o patchnotes.json (--notas gera as notas da release)
 npm run cenario:nativo # povoa a sessão nativa com o cenário de teste (app fechado)
 ```
 
@@ -352,9 +353,10 @@ Quatro variáveis afinam o dublê (`mock-state.ts`), e é com elas que o E2E tes
 
 ## Testes
 
-Dois projetos Vitest (`vitest.config.ts`):
+Três projetos Vitest (`vitest.config.ts`):
 
 - **main** (ambiente node): parser de tabelas, versões, decodificação, argumentos de run, mock service, streams (processos reais), router IPC (validação Zod nas duas direções) e schemas/contrato.
+- **ferramentas** (node): o validador e o gerador de notas do `patchnotes.json` (`scripts/`).
 - **renderer** (happy-dom + Testing Library): stores zustand (stream, containers, volumes, env), hooks (usePolling) e componentes (RunDialog, ContainersView, SetupView) com `window.wslcApi` mockado. As stores são restauradas ao estado inicial entre testes (`test/setup.ts`).
 
 ### E2E (Playwright + Electron)
@@ -390,6 +392,102 @@ Cada área tem um bloco de **caminhos tristes** alimentado por `WSLC_UI_MOCK_FAI
 falha vira alerta na view, ação que falha vira toast com o motivo, e o diálogo que falhou continua
 aberto. Os seletores saem de papel + nome acessível (o que um leitor de tela enxerga) e, nos
 overlays do HeroUI, do `data-slot` — nunca de classe de Tailwind.
+
+## Fluxo de trabalho e releases
+
+Duas branches, e uma regra que o CI cobra:
+
+- **`dev`** — integração. **Toda PR entra aqui.**
+- **`main`** — o que está liberado. Só recebe o merge da `dev`, e é esse merge que dispara o release.
+
+Uma PR aberta contra a `main` a partir de qualquer coisa que não seja a `dev` falha no job _Alvo da
+PR_. A intenção é que a `main` só ande junto com uma tag.
+
+Quem vai mexer no código: o [CONTRIBUTING.md](CONTRIBUTING.md) tem ambiente, convenções e o que
+rodar antes de abrir a PR. O projeto adota o [Código de Conduta](CODE_OF_CONDUCT.md), e falha de
+segurança segue o [SECURITY.md](SECURITY.md) — nunca por issue pública.
+
+### O que o GitHub cobra (rulesets)
+
+O fluxo acima não é convenção: está aplicado no repositório, em três rulesets.
+
+| Ruleset                                 | Alvo              | Cobra                                                                                                                                                                                                                         |
+| --------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main: entra pela dev, com CI verde`    | `refs/heads/main` | PR obrigatória (nada de push direto), _Alvo da PR_ + _Verificações_ + _E2E_ verdes, conversas resolvidas, review desfeito a cada push novo, merge **só por merge commit** — é o que faz a `main` guardar o histórico da `dev` |
+| `dev: sem force-push, CI verde nas PRs` | `refs/heads/dev`  | _Verificações_ e _E2E_ verdes para entrar por PR. Push direto continua liberado, para iterar                                                                                                                                  |
+| `tags de versão: imutáveis`             | `refs/tags/v*`    | Tag de release não se move e não se apaga: o que foi publicado fica publicado                                                                                                                                                 |
+
+As duas branches também estão protegidas contra force-push e contra remoção. Nenhum ruleset tem
+exceção de bypass, nem para o dono do repositório — a `main` anda por PR e ponto. E nenhum deles
+atrapalha o release: o workflow **cria** a tag, e criar não é mover nem apagar.
+
+Não há aprovação obrigatória (`0` reviews), senão um mantenedor solo não conseguiria fechar a própria
+PR; o que segura de verdade é o CI verde. Branch de trabalho é apagada automaticamente no merge — a
+`dev` sobrevive porque o ruleset dela proíbe remoção.
+
+### CI (`.github/workflows/ci.yml`)
+
+Roda em toda PR (para `dev` e para `main`) e em todo push na `dev`, em `windows-latest` — o alvo é
+Windows: os testes lidam com caminhos do Windows e o E2E sobe o Electron de verdade.
+
+| Job              | O que faz                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| **Alvo da PR**   | Cobra a regra das branches (só em PR)                                              |
+| **Verificações** | `typecheck`, `lint`, `format:check`, `npm test` e a validação do `patchnotes.json` |
+| **E2E**          | `npm run build` + Playwright contra o app Electron; o relatório sobe como artefato |
+
+Os testes de integração FFI se auto-desligam no CI (`describe.skipIf(locateWslcSdk() === null)`): a
+`wslcsdk.dll` não é versionada e nenhum runner tem WSL. Sobra o que faz sentido validar fora da
+máquina de desenvolvimento — e o E2E cobre os **dois motores** de qualquer forma, porque o modo de
+demonstração dubla o SDK.
+
+### `patchnotes.json`
+
+As notas de cada versão são escritas à mão, em português, no `patchnotes.json` — o release não lê
+mensagens de commit. A lista vai da versão **mais nova para a mais antiga**:
+
+```json
+{
+  "versoes": [
+    {
+      "versao": "0.2.0",
+      "data": "2026-09-15",
+      "titulo": "Uma linha de resumo (opcional).",
+      "mudancas": {
+        "adicionado": ["..."],
+        "alterado": ["..."],
+        "corrigido": ["..."],
+        "removido": ["..."],
+        "seguranca": ["..."]
+      }
+    }
+  ]
+}
+```
+
+```powershell
+npm run patchnotes                            # valida o arquivo e confere a versão do package.json
+npm run patchnotes -- --notas                 # o markdown que vira o corpo da release
+npm run patchnotes -- --notas --versao 0.1.0
+```
+
+A validação é rígida de propósito (semver, ordem, datas reais, categorias conhecidas, itens de uma
+linha), porque um erro aqui só apareceria na hora de publicar. Ela está no `npm run check` e no CI,
+então uma versão sem notas não passa da PR.
+
+### Release (`.github/workflows/release.yml`)
+
+Publicar uma versão é **subir o `version` do `package.json` e escrever as notas dela no
+`patchnotes.json`, na mesma PR**. O merge da `dev` na `main` faz o resto:
+
+1. valida as notas e lê a versão do `package.json`;
+2. se a tag `v<versao>` já existe, o run **não faz nada** — um push na `main` que não bumpou a versão
+   (um ajuste de README, por exemplo) não republica nem sobrescreve release alguma;
+3. roda o CI inteiro no estado da `main` que vai virar tag;
+4. cria a tag anotada `v<versao>` e publica a release com o corpo gerado do `patchnotes.json`.
+
+Versão com sufixo (`0.2.0-rc.1`) sai marcada como pré-lançamento. A release leva as notas e a tag,
+sem instalador: a `wslcsdk.dll` da Microsoft não é redistribuída aqui (ver [Licença](#licença)).
 
 ## Licença
 

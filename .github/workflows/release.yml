@@ -1,0 +1,107 @@
+# Release: acontece no merge da dev na main, e em nenhum outro lugar.
+#
+# A versão vem do `package.json` e as notas vêm do `patchnotes.json` — o
+# workflow não inventa nada e não lê commits. Se a tag `v<versao>` já existe,
+# este run não faz nada: um push na main que não bumpou a versão (correção de
+# README, por exemplo) não republica nem sobrescreve release nenhuma. Ou seja,
+# publicar uma versão = subir o `version` do package.json e escrever as notas
+# dela, na mesma PR.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    name: Preparar
+    runs-on: ubuntu-latest
+    outputs:
+      versao: ${{ steps.decidir.outputs.versao }}
+      tag: ${{ steps.decidir.outputs.tag }}
+      publicar: ${{ steps.decidir.outputs.publicar }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # precisa das tags para saber se esta versão já saiu
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Validar as notas e decidir se publica
+        id: decidir
+        run: |
+          versao=$(node -p "require('./package.json').version")
+          tag="v$versao"
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          # Falha se o patchnotes.json estiver inválido ou não tiver esta versão.
+          npm run patchnotes
+
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+            echo "### Nada a publicar" >> "$GITHUB_STEP_SUMMARY"
+            echo "A tag \`$tag\` já existe. Suba o \`version\` do package.json e escreva as notas dela no \`patchnotes.json\` para lançar uma versão nova." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
+            echo "### Publicando \`$tag\`" >> "$GITHUB_STEP_SUMMARY"
+            npm run --silent patchnotes -- --notas >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # As mesmas verificações da dev, agora no estado da main que vai virar tag.
+  ci:
+    name: CI
+    needs: preparar
+    if: needs.preparar.outputs.publicar == 'true'
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publicar:
+    name: Publicar
+    needs: [preparar, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Gerar as notas
+        run: npm run patchnotes -- --notas --saida notas.md
+
+      - name: Criar a tag anotada
+        env:
+          TAG: ${{ needs.preparar.outputs.tag }}
+        run: |
+          git config user.name 'Rafael de Souza Sell'
+          git config user.email 'softwareblackfox@gmail.com'
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Publicar a release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.preparar.outputs.tag }}
+          VERSAO: ${{ needs.preparar.outputs.versao }}
+        run: |
+          extra=()
+          # Versão com sufixo (0.2.0-rc.1) sai marcada como pré-lançamento.
+          if [[ "$VERSAO" == *-* ]]; then extra+=(--prerelease); fi
+          gh release create "$TAG" --title "$TAG" --notes-file notas.md --verify-tag "${extra[@]}"
+          echo "[$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG) publicada." >> "$GITHUB_STEP_SUMMARY"

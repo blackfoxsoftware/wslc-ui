@@ -1,0 +1,86 @@
+name: Bug
+description: Algo que o app faz e não devia (ou o contrário)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Falha de **segurança** não vem por aqui: veja o [SECURITY.md](https://github.com/blackfoxsoftware/wslc-ui/blob/main/SECURITY.md).
+
+  - type: checkboxes
+    attributes:
+      label: Antes de abrir
+      options:
+        - label: Procurei nas issues abertas e fechadas e não achei este caso
+          required: true
+
+  - type: textarea
+    id: o-que-aconteceu
+    attributes:
+      label: O que aconteceu
+      description: E o que você esperava que acontecesse.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduzir
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Abrir a view de Imagens
+        2. Puxar alpine:latest
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: motor
+    attributes:
+      label: Motor
+      description: Aparece em Sistema, e é trocável por lá.
+      options:
+        - CLI (wslc.exe)
+        - Nativo (SDK via FFI)
+        - Os dois
+        - Não sei
+    validations:
+      required: true
+
+  - type: dropdown
+    id: demo
+    attributes:
+      label: Acontece também no modo de demonstração?
+      description: "`$env:WSLC_UI_MOCK = '1'` antes de abrir o app. Se acontece lá, o problema é da UI e fica muito mais fácil de corrigir."
+      options:
+        - Sim
+        - Não
+        - Não testei
+    validations:
+      required: true
+
+  - type: input
+    id: versao-app
+    attributes:
+      label: Versão do app
+      description: A tag que você baixou, ou o commit se rodou do fonte.
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: versao-wsl
+    attributes:
+      label: Versão do WSL
+      description: Saída de `wsl --version` (a linha do WSL basta).
+      placeholder: WSL version 2.9.4.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: A view de **Logs** do app tem o histórico; copie o trecho do erro. Se o app nem abriu, cole o que apareceu no console.
+      render: text
+    validations:
+      required: false

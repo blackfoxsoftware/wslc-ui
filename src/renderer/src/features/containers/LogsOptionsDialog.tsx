@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ContainerInfo, ContainerLogsOptions } from '@shared/schemas'
-import { AppModal, Button, SwitchInput, TextInput } from '@/design'
+import { AppModal, Button, NumberInput, SwitchInput, TextInput } from '@/design'
 import { useStreamStore } from '@/stores/stream-store'
 import { logStreamTitle, TAIL_PADRAO } from './logs'
 
@@ -21,20 +21,19 @@ export default function LogsOptionsDialog({ container, onClose }: Props): React.
   const openStream = useStreamStore((s) => s.open)
   const label = container.name || container.id.slice(0, 12)
   const [follow, setFollow] = useState(true)
-  const [tail, setTail] = useState(String(TAIL_PADRAO))
+  const [tail, setTail] = useState<number | undefined>(TAIL_PADRAO)
   const [tudo, setTudo] = useState(false)
   const [timestamps, setTimestamps] = useState(false)
   const [since, setSince] = useState('')
   const [until, setUntil] = useState('')
 
-  const linhas = Number.parseInt(tail, 10)
-  const tailOk = tudo || (Number.isInteger(linhas) && linhas > 0)
+  const tailOk = tudo || tail !== undefined
 
   const submit = async (): Promise<void> => {
     if (!tailOk) return
     const opts: ContainerLogsOptions = {
       follow,
-      tail: tudo ? undefined : linhas,
+      tail: tudo ? undefined : tail,
       timestamps: timestamps || undefined,
       since: since.trim() || undefined,
       until: until.trim() || undefined
@@ -62,14 +61,13 @@ export default function LogsOptionsDialog({ container, onClose }: Props): React.
       title={`Logs de ${label}`}
       onClose={onClose}
     >
-      <TextInput
+      <NumberInput
         autoFocus
         hint="Quantas linhas do fim do log mostrar antes de acompanhar (-n)."
         isDisabled={tudo}
         label="Últimas linhas"
-        value={tudo ? '' : tail}
+        value={tudo ? undefined : tail}
         onChange={setTail}
-        onSubmitKey={() => void submit()}
       />
       <div className="field-group flex flex-col gap-3 px-4 py-3">
         <SwitchInput

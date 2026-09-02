@@ -1,9 +1,13 @@
 import { expect, test } from './fixtures/app'
-import { confirm, expectToast, fillField, toggleSwitch } from './fixtures/ui'
+import { confirm, expectToast, fillNumber, openTab, toggleSwitch } from './fixtures/ui'
 
 /**
  * Sistema: ambiente, sessões do wslc, escolha do motor e tuning da sessão
  * nativa. É aqui que a troca CLI ↔ Nativo acontece de verdade.
+ *
+ * A view é dividida em abas e o React Aria só monta o painel selecionado, por
+ * isso cada bloco abaixo abre a aba de que precisa antes de asseverar. As
+ * ações do cabeçalho (reverificar, encerrar sessão) valem em qualquer aba.
  */
 
 const goToSystem = async (page: import('@playwright/test').Page): Promise<void> => {
@@ -11,12 +15,31 @@ const goToSystem = async (page: import('@playwright/test').Page): Promise<void> 
   await expect(page.getByRole('heading', { level: 1, name: 'Sistema' })).toBeVisible()
 }
 
+/** Sistema já aberto na aba pedida. */
+const goToTab = async (page: import('@playwright/test').Page, tab: string): Promise<void> => {
+  await goToSystem(page)
+  await openTab(page, tab)
+}
+
+/**
+ * A escolha de motor é um ToggleButtonGroup de selecao unica, e o React Aria
+ * expoe isso como radiogroup: papel `radio` e `aria-checked`, nao `button` com
+ * `aria-pressed`. E o ponto da mudanca — dois toggles soltos nao diziam a
+ * ninguem que escolher um desliga o outro.
+ */
 const engineToggle = (page: import('@playwright/test').Page, name: 'CLI' | 'Nativo') =>
-  page.getByRole('button', { name, exact: true })
+  page.getByRole('radio', { name, exact: true })
 
 test.describe('Sistema · ambiente', () => {
   test.beforeEach(async ({ page }) => {
     await goToSystem(page)
+  })
+
+  test('abre na aba Ambiente', async ({ page }) => {
+    await expect(page.getByRole('tab', { name: 'Ambiente', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
   })
 
   test('mostra a versão do WSL, do wslc e o estado do ambiente', async ({ page }) => {
@@ -57,20 +80,11 @@ test.describe('Sistema · ambiente', () => {
     await page.getByRole('button', { name: 'Reverificar ambiente' }).click()
     await expect(page.getByText('pronto', { exact: true })).toBeVisible()
   })
-
-  test('links de referência abrem no navegador, não numa janela do app', async ({ page }) => {
-    await page.getByRole('link', { name: /Documentação do WSL container/ }).click()
-
-    await page.getByRole('button', { name: 'Expandir logs' }).click()
-    await expect(
-      page.getByText(/\(demo\) link aberto no navegador: https:\/\/learn.microsoft.com/)
-    ).toBeVisible()
-  })
 })
 
 test.describe('Sistema · motor de execução', () => {
   test('mostra o SDK nativo disponível', async ({ page }) => {
-    await goToSystem(page)
+    await goToTab(page, 'API nativa')
 
     await expect(page.getByText('disponível', { exact: true })).toBeVisible()
     await expect(page.getByText('0.9.0')).toBeVisible()
@@ -78,23 +92,48 @@ test.describe('Sistema · motor de execução', () => {
     await expect(page.getByText(/demo.*wslcsdk\.dll/)).toBeVisible()
   })
 
+  test('a matriz de cobertura diz o que cada motor faz', async ({ page }) => {
+    await goToTab(page, 'Motor')
+
+    const matriz = page.getByRole('grid', { name: 'Cobertura por motor' })
+    await expect(matriz).toContainText('Build de imagem')
+    // O que falta no nativo é o ponto da tabela: uma linha, os dois veredictos.
+    // `exact` é obrigatório aqui: sem ele "indisponível no motor CLI" também
+    // casa por substring, e o teste passaria com o veredicto invertido.
+    const build = matriz.getByRole('row').filter({ hasText: 'Build de imagem' })
+    await expect(build.getByText('disponível no motor CLI', { exact: true })).toBeAttached()
+    await expect(build.getByText('indisponível no motor nativo', { exact: true })).toBeAttached()
+  })
+
   test('troca da CLI para o nativo e volta', async ({ page }) => {
-    await goToSystem(page)
-    await expect(engineToggle(page, 'CLI')).toHaveAttribute('aria-pressed', 'true')
+    await goToTab(page, 'Motor')
+    await expect(engineToggle(page, 'CLI')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByText('inativa')).toBeVisible()
 
     await engineToggle(page, 'Nativo').click()
     await expectToast(page, 'Motor alterado para Nativo (wslcsdk).')
-    await expect(engineToggle(page, 'Nativo')).toHaveAttribute('aria-pressed', 'true')
+    await expect(engineToggle(page, 'Nativo')).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByText('"WslcUi" ativa', { exact: true })).toBeVisible()
 
     await engineToggle(page, 'CLI').click()
     await expectToast(page, 'Motor alterado para CLI (wslc.exe).')
-    await expect(engineToggle(page, 'CLI')).toHaveAttribute('aria-pressed', 'true')
+    await expect(engineToggle(page, 'CLI')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  test('o motor ativo aparece no cabeçalho, em qualquer aba', async ({ page }) => {
+    await goToTab(page, 'Motor')
+    await expect(page.getByText('motor CLI', { exact: true })).toBeVisible()
+
+    await engineToggle(page, 'Nativo').click()
+    await expectToast(page, /Motor alterado/)
+    await expect(page.getByText('motor nativo', { exact: true })).toBeVisible()
+
+    await openTab(page, 'Atualizações')
+    await expect(page.getByText('motor nativo', { exact: true })).toBeVisible()
   })
 
   test('o motor escolhido vale para as outras views', async ({ page }) => {
-    await goToSystem(page)
+    await goToTab(page, 'Motor')
     await engineToggle(page, 'Nativo').click()
     await expectToast(page, /Motor alterado/)
 
@@ -107,19 +146,19 @@ test.describe('Sistema · motor de execução', () => {
     test.use({ engine: 'native' })
 
     test('o app reabre direto no motor nativo', async ({ page }) => {
-      await goToSystem(page)
-      await expect(engineToggle(page, 'Nativo')).toHaveAttribute('aria-pressed', 'true')
+      await goToTab(page, 'Motor')
+      await expect(engineToggle(page, 'Nativo')).toHaveAttribute('aria-checked', 'true')
     })
   })
 })
 
 test.describe('Sistema · tuning da sessão nativa', () => {
   test('salva o tuning no motor CLI sem reiniciar nada', async ({ page }) => {
-    await goToSystem(page)
+    await goToTab(page, 'API nativa')
 
-    await fillField(page, 'CPUs', '2')
-    await fillField(page, 'Memória', '2048')
-    await fillField(page, 'VHD do storage', '10240')
+    await fillNumber(page, 'CPUs', '2')
+    await fillNumber(page, 'Memória', '2048')
+    await fillNumber(page, 'VHD do storage', '10240')
     await toggleSwitch(page, 'GPU na sessão')
     await page.getByRole('button', { name: 'Salvar tuning' }).click()
 
@@ -127,14 +166,15 @@ test.describe('Sistema · tuning da sessão nativa', () => {
   })
 
   test('o tuning salvo é lido de volta', async ({ page }) => {
-    await goToSystem(page)
-    await fillField(page, 'CPUs', '4')
+    await goToTab(page, 'API nativa')
+    await fillNumber(page, 'CPUs', '4')
     await page.getByRole('button', { name: 'Salvar tuning' }).click()
     await expectToast(page, /Tuning salvo/)
 
-    // Sai da view e volta: o valor vem do settings.json, não do estado local.
+    // Sai da view e volta: o valor vem do settings.json, não do estado local
+    // — e a aba remonta do zero, porque o React Aria descarta o painel.
     await page.getByRole('link', { name: 'Containers', exact: true }).click()
-    await goToSystem(page)
+    await goToTab(page, 'API nativa')
     await expect(page.getByRole('textbox', { name: 'CPUs' })).toHaveValue('4')
   })
 
@@ -142,8 +182,8 @@ test.describe('Sistema · tuning da sessão nativa', () => {
     test.use({ engine: 'native' })
 
     test('salvar o tuning exige reiniciar a sessão', async ({ page }) => {
-      await goToSystem(page)
-      await fillField(page, 'CPUs', '2')
+      await goToTab(page, 'API nativa')
+      await fillNumber(page, 'CPUs', '2')
       await page.getByRole('button', { name: 'Salvar tuning' }).click()
 
       await confirm(page, 'Salvar e reiniciar')
@@ -151,8 +191,8 @@ test.describe('Sistema · tuning da sessão nativa', () => {
     })
 
     test('recusar o reinício não salva nada', async ({ page }) => {
-      await goToSystem(page)
-      await fillField(page, 'CPUs', '2')
+      await goToTab(page, 'API nativa')
+      await fillNumber(page, 'CPUs', '2')
       await page.getByRole('button', { name: 'Salvar tuning' }).click()
 
       await page.getByRole('button', { name: 'Cancelar', exact: true }).click()
@@ -160,7 +200,7 @@ test.describe('Sistema · tuning da sessão nativa', () => {
     })
 
     test('reseta a sessão nativa depois de confirmar', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'API nativa')
       await page.getByRole('button', { name: 'Resetar sessão nativa' }).click()
       await confirm(page, 'Resetar sessão nativa')
 
@@ -174,10 +214,15 @@ test.describe('Sistema · caminhos tristes', () => {
     test.use({ fail: ['native:status'] })
 
     test('o motor nativo não pode ser escolhido', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'Motor')
+
+      await expect(engineToggle(page, 'Nativo')).toBeDisabled()
+    })
+
+    test('a aba da API nativa explica o motivo e trava as ações', async ({ page }) => {
+      await goToTab(page, 'API nativa')
 
       await expect(page.getByText('indisponível').first()).toBeVisible()
-      await expect(engineToggle(page, 'Nativo')).toBeDisabled()
       await expect(page.getByText(/wslcsdk.dll não encontrada/)).toBeVisible()
       // Sem SDK também não há tuning nem reset.
       await expect(page.getByRole('button', { name: 'Salvar tuning' })).toBeDisabled()
@@ -189,11 +234,11 @@ test.describe('Sistema · caminhos tristes', () => {
     test.use({ fail: ['engine:native'] })
 
     test('a troca de motor falha e o app permanece na CLI', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'Motor')
       await engineToggle(page, 'Nativo').click()
 
       await expectToast(page, /já está aberta por outro processo/)
-      await expect(engineToggle(page, 'CLI')).toHaveAttribute('aria-pressed', 'true')
+      await expect(engineToggle(page, 'CLI')).toHaveAttribute('aria-checked', 'true')
     })
   })
 
@@ -201,8 +246,8 @@ test.describe('Sistema · caminhos tristes', () => {
     test.use({ engine: 'native', fail: ['system:restart-native'] })
 
     test('avisa que o reinício falhou', async ({ page }) => {
-      await goToSystem(page)
-      await fillField(page, 'CPUs', '2')
+      await goToTab(page, 'API nativa')
+      await fillNumber(page, 'CPUs', '2')
       await page.getByRole('button', { name: 'Salvar tuning' }).click()
       await confirm(page, 'Salvar e reiniciar')
 
@@ -214,7 +259,7 @@ test.describe('Sistema · caminhos tristes', () => {
     test.use({ engine: 'native', fail: ['system:reset-native'] })
 
     test('avisa que o reset falhou', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'API nativa')
       await page.getByRole('button', { name: 'Resetar sessão nativa' }).click()
       await confirm(page, 'Resetar sessão nativa')
 
@@ -260,7 +305,7 @@ test.describe('Sistema · caminhos tristes', () => {
 
 test.describe('Sistema · escolha da wslcsdk.dll', () => {
   test('mostra a DLL empacotada, com origem e ABI', async ({ page }) => {
-    await goToSystem(page)
+    await goToTab(page, 'API nativa')
 
     await expect(page.getByText('empacotada com o app')).toBeVisible()
     await expect(page.getByText('2.9.9+', { exact: true })).toBeVisible()
@@ -273,7 +318,7 @@ test.describe('Sistema · escolha da wslcsdk.dll', () => {
     test.use({ pick: 'D:\\baixado\\wslcsdk.dll' })
 
     test('sonda, aceita e avisa que vale ao reabrir', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'API nativa')
       await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
 
       await expectToast(page, /2\.9\.9\+ escolhida.*[Rr]eabra/)
@@ -282,7 +327,7 @@ test.describe('Sistema · escolha da wslcsdk.dll', () => {
     })
 
     test('voltar para a empacotada limpa a escolha', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'API nativa')
       await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
       await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeVisible()
 
@@ -298,7 +343,7 @@ test.describe('Sistema · escolha da wslcsdk.dll', () => {
     test.use({ pick: 'C:\\Downloads\\leia-me.txt' })
 
     test('recusa e não grava a escolha', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'API nativa')
       await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
 
       await expectToast(page, /Não é uma wslcsdk.dll utilizável/)
@@ -310,7 +355,7 @@ test.describe('Sistema · escolha da wslcsdk.dll', () => {
     test.use({ pick: 'cancel' })
 
     test('não muda nada', async ({ page }) => {
-      await goToSystem(page)
+      await goToTab(page, 'API nativa')
       await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
 
       await expect(page.getByText('empacotada com o app')).toBeVisible()

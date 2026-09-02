@@ -1,13 +1,18 @@
+import { useState } from 'react'
 import {
   Button,
   Checkbox,
   Description,
   Input,
+  InputGroup,
   Label,
   ListBox,
+  NumberField,
   SearchField,
   Select,
   Switch,
+  Tag,
+  TagGroup,
   TextArea,
   TextField,
   ToggleButton,
@@ -221,6 +226,23 @@ interface TextInputProps {
   className?: string
   inputClassName?: string
   onSubmitKey?: () => void
+  /**
+   * Botão (ou botões) acoplado ao campo: escolher pasta, escolher arquivo.
+   *
+   * Antes cada tela montava isso com `flex items-end gap-2` e um `IconAction`
+   * ao lado: dois controles soltos que por acaso estavam perto, cada um com a
+   * sua moldura, e o alinhamento vertical dependia de haver ou não `hint`. O
+   * `InputGroup` põe o botão DENTRO da moldura do campo, que é o que ele é —
+   * parte do mesmo controle.
+   */
+  action?: FieldAction | FieldAction[]
+}
+
+interface FieldAction {
+  label: string
+  icon: React.ReactNode
+  onPress: () => void
+  isDisabled?: boolean
 }
 
 export function TextInput({
@@ -236,8 +258,14 @@ export function TextInput({
   autoFocus,
   className,
   inputClassName,
-  onSubmitKey
+  onSubmitKey,
+  action
 }: TextInputProps): React.JSX.Element {
+  const onKeyDown = (e: React.KeyboardEvent): void => {
+    if (onSubmitKey && e.key === 'Enter') onSubmitKey()
+  }
+  const acoes = action === undefined ? [] : Array.isArray(action) ? action : [action]
+
   return (
     <TextField
       className={cn('flex flex-col gap-1.5', className)}
@@ -248,16 +276,226 @@ export function TextInput({
       onChange={onChange}
     >
       <FieldLabel hint={hint} label={label} />
-      <Input
-        autoFocus={autoFocus}
-        className={inputClassName}
-        placeholder={placeholder}
-        onKeyDown={(e) => {
-          if (onSubmitKey && e.key === 'Enter') onSubmitKey()
-        }}
-      />
+      {acoes.length > 0 ? (
+        <InputGroup>
+          <InputGroup.Input
+            autoFocus={autoFocus}
+            className={inputClassName}
+            placeholder={placeholder}
+            onKeyDown={onKeyDown}
+          />
+          <InputGroup.Suffix>
+            {acoes.map((a) => (
+              <Tooltip key={a.label} delay={400}>
+                <Button
+                  isIconOnly
+                  aria-label={a.label}
+                  isDisabled={a.isDisabled}
+                  size="sm"
+                  variant="ghost"
+                  onPress={a.onPress}
+                >
+                  {a.icon}
+                </Button>
+                <Tooltip.Content>{a.label}</Tooltip.Content>
+              </Tooltip>
+            ))}
+          </InputGroup.Suffix>
+        </InputGroup>
+      ) : (
+        <Input
+          autoFocus={autoFocus}
+          className={inputClassName}
+          placeholder={placeholder}
+          onKeyDown={onKeyDown}
+        />
+      )}
       {description && <Description>{description}</Description>}
     </TextField>
+  )
+}
+
+interface NumberInputProps {
+  label: string
+  /** `undefined` é campo vazio, e vazio quer dizer "usa o padrão". */
+  value: number | undefined
+  onChange: (value: number | undefined) => void
+  placeholder?: string
+  hint?: string
+  description?: string
+  minValue?: number
+  maxValue?: number
+  /**
+   * Passo das setas. NÃO passe isto nos campos em MB.
+   *
+   * O `NumberField` do React Aria não usa o passo só nas setas: ele ARREDONDA
+   * o valor confirmado para o múltiplo mais próximo. Com `step={100}`, digitar
+   * 20 grava o mínimo; com `step={512}`, digitar 2048 grava 2049. Um passo
+   * confortável para clicar não vale alterar o número que a pessoa escreveu.
+   */
+  step?: number
+  isDisabled?: boolean
+  autoFocus?: boolean
+  className?: string
+}
+
+/**
+ * Campo numérico de verdade.
+ *
+ * Antes cada um destes era um `TextInput` com `Number.parseInt` do lado de
+ * fora: quem digitava letra não recebia aviso nenhum (o botão só ficava
+ * cinza), não havia mínimo nem passo, e as setas do teclado não faziam nada.
+ * O `NumberField` do HeroUI resolve os três de uma vez e ainda dá o
+ * `role="spinbutton"` para leitor de tela.
+ *
+ * Vazio continua sendo um valor válido — é assim que se diz "deixa o padrão".
+ * O React Aria representa vazio como `NaN`; a conversão para `undefined` fica
+ * aqui, para nenhuma tela precisar saber disso.
+ */
+export function NumberInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+  description,
+  minValue = 1,
+  maxValue,
+  step,
+  isDisabled,
+  autoFocus,
+  className
+}: NumberInputProps): React.JSX.Element {
+  return (
+    <NumberField
+      className={cn('flex flex-col gap-1.5', className)}
+      // Sem separador de milhar: em pt-BR o formatador escreve 2048 MB como
+      // "2.048", que num campo técnico lê como dois e pouco. Aqui todo número
+      // é contagem crua (núcleos, MB, uid, linhas), nunca valor para humano.
+      formatOptions={{ useGrouping: false, maximumFractionDigits: 0 }}
+      isDisabled={isDisabled}
+      maxValue={maxValue}
+      minValue={minValue}
+      step={step}
+      value={value ?? Number.NaN}
+      onChange={(v) => onChange(Number.isNaN(v) ? undefined : v)}
+    >
+      <FieldLabel hint={hint} label={label} />
+      {/* Ordem da documentação: decremento, campo, incremento. Com o campo
+          primeiro, o layout do Group colapsa o input e joga o `+` para a outra
+          ponta da linha. */}
+      <NumberField.Group>
+        <NumberField.DecrementButton />
+        <NumberField.Input autoFocus={autoFocus} placeholder={placeholder} />
+        <NumberField.IncrementButton />
+      </NumberField.Group>
+      {description && <Description>{description}</Description>}
+    </NumberField>
+  )
+}
+
+interface TagsInputProps {
+  label: string
+  values: string[]
+  onChange: (values: string[]) => void
+  placeholder?: string
+  hint?: string
+  description?: string
+  isDisabled?: boolean
+  className?: string
+  /**
+   * Se a vírgula separa valores na entrada. Ligado por padrão, porque colar
+   * uma lista pronta é comum.
+   *
+   * DESLIGUE onde o próprio valor contém vírgula — `--secret
+   * id=npmrc,src=C:\eu\.npmrc` e `--tmpfs /run:rw,size=64m` são UM valor cada.
+   * Era exatamente aí que o `split(',')` da versão anterior partia o valor em
+   * dois e mandava os dois pedaços para a CLI como flags separadas.
+   */
+  commaSeparated?: boolean
+}
+
+/**
+ * Lista de valores, um chip por valor.
+ *
+ * Estes campos eram texto livre "separe por vírgula", com um `split(',')` na
+ * hora de enviar. Três problemas: valor que contém vírgula (um `--label` com
+ * texto, uma opção de driver) quebrava calado; não havia como remover um item
+ * do meio sem editar a string; e não dava para ver quantos valores existiam.
+ * Aqui cada valor é um `Tag` removível, e a vírgula deixa de ser sintaxe.
+ *
+ * Enter e vírgula confirmam o que está digitado; Backspace no campo vazio
+ * apaga o último chip, que é o gesto que todo mundo já espera destes campos.
+ */
+export function TagsInput({
+  label,
+  values,
+  onChange,
+  placeholder,
+  hint,
+  description,
+  isDisabled,
+  className,
+  commaSeparated = true
+}: TagsInputProps): React.JSX.Element {
+  const [draft, setDraft] = useState('')
+
+  const commit = (raw: string): void => {
+    const novos = (commaSeparated ? raw.split(',') : [raw])
+      .map((v) => v.trim())
+      .filter((v) => v && !values.includes(v))
+    if (novos.length > 0) onChange([...values, ...novos])
+    setDraft('')
+  }
+
+  // A instrução de uso mora no componente, não em cada tela: assim as 14
+  // chamadas falam só do CONTEÚDO do campo, e o gesto é descrito igual em
+  // todas — inclusive quando muda.
+  const comoUsar = commaSeparated
+    ? 'Enter ou vírgula confirma cada valor; Backspace apaga o último.'
+    : 'Enter confirma cada valor; Backspace apaga o último.'
+
+  return (
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      <FieldLabel hint={hint ? `${hint} ${comoUsar}` : comoUsar} label={label} />
+      <TextField
+        aria-label={label}
+        isDisabled={isDisabled}
+        value={draft}
+        onChange={(v) => (commaSeparated && v.endsWith(',') ? commit(v) : setDraft(v))}
+      >
+        <Input
+          placeholder={placeholder}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && draft.trim()) {
+              // Sem isto o Enter envia o formulário do diálogo em volta.
+              e.preventDefault()
+              commit(draft)
+            } else if (e.key === 'Backspace' && draft === '' && values.length > 0) {
+              onChange(values.slice(0, -1))
+            }
+          }}
+        />
+      </TextField>
+      {values.length > 0 && (
+        <TagGroup
+          aria-label={`Valores de ${label}`}
+          size="sm"
+          // Sem `onRemove` o HeroUI não desenha o botão de remover — que é
+          // exatamente o que "desabilitado" quer dizer aqui.
+          onRemove={isDisabled ? undefined : (keys) => onChange(values.filter((v) => !keys.has(v)))}
+        >
+          <TagGroup.List className="flex flex-wrap gap-1.5 pt-0.5">
+            {values.map((v) => (
+              <Tag key={v} id={v} textValue={v}>
+                {v}
+              </Tag>
+            ))}
+          </TagGroup.List>
+        </TagGroup>
+      )}
+      {description && <Description>{description}</Description>}
+    </div>
   )
 }
 

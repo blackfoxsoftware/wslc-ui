@@ -64,7 +64,7 @@ export default function StreamPanel(): React.JSX.Element | null {
   const hasLayers = stream.layers.length > 0
 
   return (
-    <section className=" flex h-64 shrink-0 flex-col border-t border-separator">
+    <section className="flex h-64 shrink-0 flex-col border-t border-separator">
       <header className="flex items-center gap-2.5 border-b border-separator px-4 py-2 text-sm">
         <StateDot tone={stream.running ? 'success' : 'danger'} />
         <strong className="font-medium">{stream.title}</strong>

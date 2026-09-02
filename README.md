@@ -26,7 +26,9 @@ UI desktop (Electron + Vite + React + TypeScript) para o **WSL container** (`wsl
 - **Zustand** — estado do renderer em stores tipadas
 - **TanStack Router** — roteamento file-based (`src/renderer/src/routes/`, hash history para `file://`)
 - **HeroUI v3 + Tailwind CSS v4** — biblioteca de componentes (React Aria por baixo) tematizada pelas variáveis semânticas dela; o design system do app vive em `src/renderer/src/design/`
-- **UX**: rail de navegação recolhível, confirmações via modal global (`confirm-store`), toasts semânticos (`toast` do HeroUI), menus de ação por linha, Imagens em abas Locais/Catálogo e diálogo de execução em cinco abas com sugestões automáticas por imagem
+- **UX**: rail de navegação recolhível, confirmações via modal global (`confirm-store`), toasts semânticos (`toast` do HeroUI), menus de ação por linha, Sistema em abas (Ambiente · Motor · API nativa · Atualizações), Imagens em abas Locais/Catálogo e diálogo de execução em cinco abas com sugestões automáticas por imagem
+- **Movimento**: trocar de tela e trocar de aba usam view transition, com o eixo do movimento seguindo o eixo do navegador — o rail é vertical, então a página entra por baixo no sentido em que o item desceu; a faixa de abas é horizontal, então o painel entra pelo lado. Cabeçalho, faixa de abas e painéis do rodapé ficam parados: só a região que troca de conteúdo se move (`design/motion.css`). Mudança de layout — o rail recolhendo, o marcador do item ativo — é transição de CSS no elemento de verdade, que interpola o reflow em vez de esticar um snapshot. `prefers-reduced-motion` corta tudo na origem
+- **Controles pelo tipo do dado**: lista de valores é `TagsInput` (um chip removível por valor, sem vírgula como sintaxe), número é `NumberField`, uso de CPU/memória é `Meter` (medição, não progresso), campo com seletor de arquivo é `InputGroup` e escolha única é `ToggleButtonGroup` — tudo composto em `design/controls.tsx`, nunca montado à mão na view
 - **Vitest** — testes de main, shared e renderer (Testing Library + happy-dom)
 - **oxlint + oxfmt** — lint e formatação (toolchain oxc)
 

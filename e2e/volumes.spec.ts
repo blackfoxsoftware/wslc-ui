@@ -1,11 +1,14 @@
 import { ENGINES, expect, test } from './fixtures/app'
 import {
   chooseOption,
+  clearField,
   closeSheet,
   confirm,
   expectAlert,
   expectToast,
   fillField,
+  fillNumber,
+  fillTags,
   menuAction,
   modal,
   row,
@@ -44,10 +47,10 @@ for (const engine of ENGINES) {
       await fillField(dialog, 'Nome do volume', 'e2e-dados')
 
       if (engine === 'native') {
-        await fillField(dialog, 'Tamanho', '2048')
+        await fillNumber(dialog, 'Tamanho', '2048')
         await chooseOption(page, dialog.locator('[data-slot="select-trigger"]').first(), 'Fixo')
-        await fillField(dialog, 'uid do dono', '1000')
-        await fillField(dialog, 'gid do dono', '1000')
+        await fillNumber(dialog, 'uid do dono', '1000')
+        await fillNumber(dialog, 'gid do dono', '1000')
       }
 
       await dialog.getByRole('button', { name: 'Criar volume' }).click()
@@ -103,7 +106,7 @@ test.describe('Volumes · diferenças entre os motores', () => {
 
     await fillField(dialog, 'Nome do volume', 'e2e-vhd')
     await chooseOption(page, dialog.locator('[data-slot="select-trigger"]').first(), 'vhd')
-    await fillField(dialog, 'Tamanho', '512')
+    await fillNumber(dialog, 'Tamanho', '512')
 
     await dialog.getByRole('button', { name: 'Criar volume' }).click()
     await expectToast(page, 'Volume "e2e-vhd" criado.')
@@ -118,7 +121,7 @@ test.describe('Volumes · diferenças entre os motores', () => {
     const dialog = modal(page)
 
     await fillField(dialog, 'Nome do volume', 'e2e-rotulado')
-    await fillField(dialog, 'Labels', 'app=site, env=dev')
+    await fillTags(dialog, 'Labels', 'app=site', 'env=dev')
     await dialog.getByRole('button', { name: 'Criar volume' }).click()
     await expectToast(page, 'Volume "e2e-rotulado" criado.')
 
@@ -174,15 +177,17 @@ test.describe('Volumes · diferenças entre os motores', () => {
       await fillField(dialog, 'Nome do volume', 'e2e-invalido')
       await expect(criar).toBeEnabled()
 
-      await fillField(dialog, 'Tamanho', '0')
+      // O NumberInput recusa 0 sozinho (minValue), então o que ainda pode
+      // deixar o formulário inválido é o campo vazio.
+      await clearField(dialog, 'Tamanho')
       await expect(criar).toBeDisabled()
 
-      await fillField(dialog, 'Tamanho', '512')
-      await fillField(dialog, 'uid do dono', '1000')
+      await fillNumber(dialog, 'Tamanho', '512')
+      await fillNumber(dialog, 'uid do dono', '1000')
       // uid sem gid não vale: os dois andam juntos.
       await expect(criar).toBeDisabled()
 
-      await fillField(dialog, 'gid do dono', '1000')
+      await fillNumber(dialog, 'gid do dono', '1000')
       await expect(criar).toBeEnabled()
     })
   })

@@ -12,7 +12,7 @@ import { useStatsStore } from '../stores/stats-store'
 import { useStreamStore } from '../stores/stream-store'
 import { useWindowStore } from '../stores/window-store'
 
-// APIs de DOM que o Radix usa e o happy-dom não implementa.
+// APIs de DOM que o HeroUI/React Aria usa e o happy-dom não implementa.
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class {
     observe(): void {}
@@ -39,6 +39,12 @@ if (!Element.prototype.hasPointerCapture) {
 }
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
+}
+// Web Animations API: o indicador das abas (SelectionIndicator do React Aria)
+// consulta as animações em curso para deslizar do lugar antigo para o novo.
+// Sem animação nenhuma no happy-dom, a lista vazia é a resposta correta.
+if (!Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => []
 }
 
 interface ResettableStore<T> {

@@ -1,73 +1,41 @@
-import { useCallback, useEffect, useState } from 'react'
-import { FileCog, FolderSearch, ListTree, Power, RefreshCw, RotateCcw, Save, Undo2 } from 'lucide-react'
-import type { NativeStatus, NativeTuning, WslcSessionInfo } from '@shared/schemas'
-import {
-  Button,
-  Cell,
-  Column,
-  DataTable,
-  Empty,
-  Group,
-  Hint,
-  IconAction,
-  Mono,
-  PageBody,
-  PageHeader,
-  PageShell,
-  Row,
-  SectionTitle,
-  StateChip,
-  SwitchInput,
-  TextInput,
-  ToggleButton,
-  toast
-} from '@/design'
+import { useEffect } from 'react'
+import { Cpu, Download, MonitorCog, Plug, Power, RefreshCw } from 'lucide-react'
+import { IconAction, PageBody, PageHeader, PageShell, StateChip, Tabs, toast } from '@/design'
 import { confirmDialog } from '@/stores/confirm-store'
 import { useEngineStore } from '@/stores/engine-store'
 import { useEnvStore } from '@/stores/env-store'
 import { useNativeStore } from '@/stores/native-store'
-import { Fact } from './Fact'
-import UpdateCard from './UpdateCard'
+import EngineTab from './EngineTab'
+import EnvironmentTab from './EnvironmentTab'
+import NativeApiTab from './NativeApiTab'
+import UpdatesTab from './UpdatesTab'
 
-/** Rótulo de onde a DLL em uso saiu (nativeStatus.source). */
-const SDK_SOURCES: Record<NonNullable<NativeStatus['source']>, string> = {
-  bundled: 'empacotada com o app',
-  custom: 'escolhida por você',
-  system: 'instalação do WSL',
-  env: 'WSLC_SDK_DLL (ambiente)'
-}
+/**
+ * Sistema, em abas.
+ *
+ * Era uma página só com blocos heterogêneos — instalação, sessões,
+ * atualizações, escolha de motor, DLL e tuning — numa grade de duas colunas
+ * onde metade dos blocos ocupava as duas. O resultado era uma escada com
+ * buracos, e o controle mais importante do app (qual motor executa TUDO)
+ * ficava abaixo da dobra, como uma linha de `<dl>` no quarto bloco.
+ *
+ * Cada aba responde a uma pergunta:
+ *   Ambiente     o que está instalado, e está funcionando?
+ *   Motor        quem executa, e o que eu perco trocando?
+ *   API nativa   qual DLL, e com que limites de VM?
+ *   Atualizações a versão do app está em dia?
+ *
+ * O painel só monta quando a aba é selecionada (é assim que o React Aria trata
+ * `TabPanel`), então cada aba busca o que precisa ao entrar — voltar para uma
+ * aba a atualiza, o que é o que se espera de uma tela de diagnóstico.
+ */
 
-const LINKS = [
-  {
-    href: 'https://learn.microsoft.com/windows/wsl/wsl-container',
-    label: 'Documentação do WSL container · Microsoft Learn'
-  },
-  {
-    href: 'https://learn.microsoft.com/windows/wsl/tutorials/wsl-containers',
-    label: 'Tutorial: primeiros passos com wslc'
-  },
-  {
-    href: 'https://wsl.dev/api-reference/',
-    label: 'Referência da API · C, C# e C++'
-  },
-  { href: 'https://aka.ms/wslc-samples', label: 'Exemplos oficiais da API WSLC' },
-  { href: 'https://github.com/microsoft/WSL/releases', label: 'Releases do WSL · pré-release 2.9.3+' }
-]
-
-const resetNative = async (reloadEngine: () => Promise<void>): Promise<void> => {
-  const ok = await confirmDialog({
-    title: 'Resetar a sessão nativa?',
-    description:
-      'Termina a sessão "WslcUi" e apaga o storage dela: TODOS os containers, registros órfãos e imagens da sessão nativa serão perdidos. A sessão é recriada vazia na próxima operação.',
-    confirmLabel: 'Resetar sessão nativa',
-    destructive: true
-  })
-  if (!ok) return
-  const res = await window.wslcApi.resetNativeSession()
-  if (res.ok) toast.success(res.stdout || 'Sessão nativa resetada.')
-  else toast.danger(res.stderr || 'Falha ao resetar a sessão nativa.')
-  await reloadEngine()
-}
+const TABS = [
+  { id: 'ambiente', label: 'Ambiente', icon: MonitorCog },
+  { id: 'motor', label: 'Motor', icon: Cpu },
+  { id: 'api-nativa', label: 'API nativa', icon: Plug },
+  { id: 'atualizacoes', label: 'Atualizações', icon: Download }
+] as const
 
 const terminate = async (): Promise<void> => {
   const ok = await confirmDialog({
@@ -82,136 +50,33 @@ const terminate = async (): Promise<void> => {
   else toast.danger(res.stderr || res.stdout || 'Falha ao encerrar a sessão')
 }
 
-const resetWslcSettings = async (): Promise<void> => {
-  const ok = await confirmDialog({
-    title: 'Redefinir as configurações do wslc?',
-    description: 'O settings.yaml global do wslc volta aos padrões internos (wslc settings reset).',
-    confirmLabel: 'Redefinir',
-    destructive: true
-  })
-  if (!ok) return
-  const res = await window.wslcApi.resetWslcSettings()
-  if (res.ok) toast.success(res.stdout.trim() || 'Configurações do wslc redefinidas.')
-  else toast.danger(res.stderr || res.stdout || 'Falha ao redefinir as configurações.')
-}
-
-const parseField = (raw: string): number | undefined => {
-  const n = Number.parseInt(raw, 10)
-  return Number.isInteger(n) && n > 0 ? n : undefined
-}
-
 export default function SystemView(): React.JSX.Element {
-  const env = useEnvStore((s) => s.env)
   const recheck = useEnvStore((s) => s.refresh)
-  const native = useNativeStore((s) => s.status)
   const refreshNative = useNativeStore((s) => s.refresh)
-  const engineStatus = useEngineStore((s) => s.status)
-  const switching = useEngineStore((s) => s.switching)
   const loadEngine = useEngineStore((s) => s.load)
-  const setEngine = useEngineStore((s) => s.setEngine)
-  const [sessions, setSessions] = useState<WslcSessionInfo[]>([])
-  const [cpuCount, setCpuCount] = useState('')
-  const [memoryMb, setMemoryMb] = useState('')
-  const [vhdSizeMb, setVhdSizeMb] = useState('')
-  const [gpu, setGpu] = useState(false)
-  const [savingTuning, setSavingTuning] = useState(false)
-  const [sdkPath, setSdkPath] = useState<string | null>(null)
-  const [pickingSdk, setPickingSdk] = useState(false)
+  const engine = useEngineStore((s) => s.status?.engine)
 
-  const refreshSessions = useCallback((): void => {
-    window.wslcApi
-      .listWslcSessions()
-      .then(setSessions)
-      .catch(() => setSessions([]))
-  }, [])
-
+  // Motor e SDK são carregados pela view, não pela aba: o chip do cabeçalho
+  // mostra o motor ativo em qualquer aba, e a aba Motor precisa saber se a DLL
+  // respondeu antes de deixar escolher o nativo.
   useEffect(() => {
     void refreshNative()
     void loadEngine()
-    refreshSessions()
-    window.wslcApi
-      .sdkPath()
-      .then(setSdkPath)
-      .catch(() => setSdkPath(null))
-    window.wslcApi
-      .getNativeTuning()
-      .then((t: NativeTuning) => {
-        setCpuCount(t.cpuCount ? String(t.cpuCount) : '')
-        setMemoryMb(t.memoryMb ? String(t.memoryMb) : '')
-        setVhdSizeMb(t.vhdSizeMb ? String(t.vhdSizeMb) : '')
-        setGpu(t.gpu ?? false)
-      })
-      .catch(() => undefined)
-  }, [refreshNative, loadEngine, refreshSessions])
+  }, [refreshNative, loadEngine])
 
-  /**
-   * Escolher outra wslcsdk.dll. A sonda roda ANTES de gravar: um arquivo que
-   * não é a DLL certa é recusado aqui, e não vira um motor nativo quebrado na
-   * próxima abertura.
-   */
-  const pickSdk = async (): Promise<void> => {
-    setPickingSdk(true)
-    try {
-      const probe = await window.wslcApi.pickSdk()
-      if (probe === null) return
-      if (!probe.ok) {
-        toast.danger(probe.detail)
-        return
-      }
-      await window.wslcApi.setSdkPath(probe.path)
-      setSdkPath(probe.path)
-      toast.success(`DLL ${probe.abi} escolhida. Reabra o app para passar a usá-la.`)
-    } catch (e) {
-      toast.danger(e instanceof Error ? e.message : String(e))
-    } finally {
-      setPickingSdk(false)
-    }
+  const PANELS = {
+    ambiente: <EnvironmentTab />,
+    motor: <EngineTab />,
+    'api-nativa': <NativeApiTab />,
+    atualizacoes: <UpdatesTab />
   }
-
-  const useBundledSdk = async (): Promise<void> => {
-    await window.wslcApi.setSdkPath(null)
-    setSdkPath(null)
-    toast.success('Voltando para a DLL empacotada. Reabra o app para aplicar.')
-  }
-
-  const saveTuning = async (): Promise<void> => {
-    const tuning: NativeTuning = {
-      cpuCount: parseField(cpuCount),
-      memoryMb: parseField(memoryMb),
-      vhdSizeMb: parseField(vhdSizeMb),
-      gpu: gpu || undefined
-    }
-    const restart =
-      engineStatus?.engine === 'native' &&
-      (await confirmDialog({
-        title: 'Salvar e reiniciar a sessão nativa?',
-        description:
-          'O tuning só vale quando a sessão é recriada. Reiniciar agora remove os containers nativos em execução (as imagens são mantidas).',
-        confirmLabel: 'Salvar e reiniciar',
-        destructive: true
-      }))
-    if (engineStatus?.engine === 'native' && !restart) return
-    setSavingTuning(true)
-    try {
-      await window.wslcApi.setNativeTuning(tuning)
-      if (restart) {
-        const res = await window.wslcApi.restartNativeSession()
-        if (res.ok) toast.success(res.stdout || 'Sessão nativa reiniciada com o novo tuning.')
-        else toast.danger(res.stderr || 'Falha ao reiniciar a sessão nativa.')
-        await loadEngine()
-      } else {
-        toast.success('Tuning salvo: vale quando a sessão nativa for criada.')
-      }
-    } finally {
-      setSavingTuning(false)
-    }
-  }
-
-  const engine = engineStatus?.engine ?? 'cli'
 
   return (
-    <PageShell>
+    // `fill`: quem rola é o painel da aba, por baixo da faixa de abas. Sem
+    // isso a faixa sobe junto com o conteúdo e a navegação sai da tela.
+    <PageShell fill>
       <PageHeader
+        flush
         actions={
           <>
             <IconAction label="Reverificar ambiente" variant="secondary" onPress={() => void recheck()}>
@@ -226,271 +91,45 @@ export default function SystemView(): React.JSX.Element {
             </IconAction>
           </>
         }
+        meta={
+          engine === undefined ? undefined : (
+            <StateChip
+              label={engine === 'native' ? 'motor nativo' : 'motor CLI'}
+              tone={engine === 'native' ? 'accent' : 'default'}
+            />
+          )
+        }
         title="Sistema"
       />
 
-      <PageBody className="grid gap-5 xl:grid-cols-2 xl:items-start">
-        <Group title="Ambiente">
-          <dl className="flex flex-col">
-            <Fact label="WSL">{env?.wslVersion ?? 'não detectado'}</Fact>
-            <Fact label="wslc">{env?.wslcVersion ?? 'não detectado'}</Fact>
-            <Fact label="Status">
-              <StateChip
-                label={env?.ready ? 'pronto' : 'indisponível'}
-                tone={env?.ready ? 'success' : 'danger'}
-              />
-            </Fact>
-          </dl>
-          <p className="mt-4 max-w-[80ch] text-sm leading-relaxed text-muted">
-            O WSL container está em <strong className="text-foreground">preview público</strong> (WSL 2.9.3+
-            pré-release). GA prevista para o outono de 2026 (hemisfério norte). Não recomendado para produção.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onPress={() => void window.wslcApi.openWslcSettings()}>
-              <FileCog className="size-4" />
-              Abrir settings.yaml do wslc
-            </Button>
-            <Button size="sm" variant="secondary" onPress={() => void resetWslcSettings()}>
-              <Undo2 className="size-4" />
-              Redefinir configurações do wslc
-            </Button>
-          </div>
-        </Group>
-
-        <DataTable
-          ariaLabel="Sessões wslc"
-          emptyState={
-            <Empty
-              description="Nenhuma sessão do wslc está aberta neste momento."
-              icon={<ListTree />}
-              title="Sem sessões ativas"
-            />
-          }
-          head={
-            <>
-              <Column isRowHeader width={90}>
-                ID
-              </Column>
-              <Column width={140}>PID do criador</Column>
-              <Column>Nome</Column>
-            </>
-          }
-          toolbar={
-            <>
-              <h2 className="font-display text-sm font-semibold tracking-tight">Sessões wslc ativas</h2>
-              <Hint text='A CLI cria a "wslc-cli-…" sob demanda; "WslcUi" é a sessão do motor nativo. Os subcomandos session enter/run/shell são para uso em terminal: anexam a sessões existentes pela pasta de storage.' />
-              <IconAction
-                className="ms-auto"
-                label="Atualizar sessões"
-                variant="secondary"
-                onPress={refreshSessions}
-              >
-                <RefreshCw className="size-4" />
-              </IconAction>
-            </>
-          }
-        >
-          {sessions.map((s) => (
-            <Row key={s.id} id={String(s.id)}>
-              <Cell>
-                <Mono>{s.id}</Mono>
-              </Cell>
-              <Cell>
-                <Mono>{s.creatorPid}</Mono>
-              </Cell>
-              <Cell>
-                <Mono>{s.displayName}</Mono>
-              </Cell>
-            </Row>
-          ))}
-        </DataTable>
-
-        <UpdateCard />
-
-        <Group
-          actions={
-            native ? (
-              <StateChip
-                label={native.available ? 'disponível' : 'indisponível'}
-                tone={native.available ? 'success' : 'default'}
-              />
-            ) : (
-              <StateChip label="verificando…" />
-            )
-          }
-          className="xl:col-span-2"
-          title="API nativa (wslcsdk)"
-        >
-          <dl className="flex flex-col">
-            <Fact label="Motor">
-              <div className="flex gap-1.5">
-                <ToggleButton
-                  isDisabled={switching || !engineStatus}
-                  isSelected={engine === 'cli'}
-                  size="sm"
-                  onChange={() => void setEngine('cli')}
-                >
-                  CLI
-                </ToggleButton>
-                <ToggleButton
-                  isDisabled={switching || !engineStatus || !native?.available}
-                  isSelected={engine === 'native'}
-                  size="sm"
-                  onChange={() => void setEngine('native')}
-                >
-                  Nativo
-                </ToggleButton>
-                <Hint text="CLI chama o wslc.exe a cada operação; Nativo usa a wslcsdk.dll por FFI, numa sessão própria do app." />
-              </div>
-            </Fact>
-            <Fact label="Sessão nativa">
-              {engineStatus?.engine === 'native'
-                ? engineStatus.sessionActive
-                  ? '"WslcUi" ativa'
-                  : 'criada na primeira operação'
-                : 'inativa'}
-            </Fact>
-            <Fact label="WSL (pelo SDK)">
-              <Mono>{native?.wslVersion ?? '-'}</Mono>
-              <Hint text="O SDK reporta a versão do WSL instalado, não a da própria DLL — binários diferentes respondem o mesmo número." />
-            </Fact>
-            <Fact label="ABI da DLL">
-              <Mono>{native?.abi ?? '-'}</Mono>
-            </Fact>
-            {native && native.missingComponents.length > 0 && (
-              <Fact label="Faltando">{native.missingComponents.join(', ')}</Fact>
-            )}
-          </dl>
-
-          <p className="mt-4 max-w-[80ch] text-sm leading-relaxed text-muted">
-            {native?.detail ?? 'Consultando a wslcsdk.dll…'} {engineStatus?.detail}
-          </p>
-          <p className="mt-2 max-w-[80ch] text-sm leading-relaxed text-muted">
-            No motor nativo, containers (executar, ações, logs, exec, inspect, terminal), imagens (listar,
-            pull e push com progresso por camada, login em registry, tag, load/import de tarball, remover) e
-            volumes VHDX (tamanho, tipo e dono) usam a sessão própria do app (&quot;WslcUi&quot;) via FFI.
-            Crashes de processos nos containers geram um aviso com o caminho do dump (.dmp) coletado pelo WSL.
-            A partir da ABI 2.9.9 os containers nativos SOBREVIVEM ao fechamento do app: eles param, e o app
-            os reabre pelo nome na próxima execução. Na 2.9.3 eles ainda são removidos na saída, porque sem
-            reabrir por ID virariam registros órfãos e invisíveis. Build, save, export, stats e redes nomeadas
-            só existem no motor CLI.
-          </p>
-
-          <section className="mt-5 flex flex-col gap-4 border-t border-separator pt-5">
-            <SectionTitle description="O app vem com a DLL do SDK. Trocar só faz sentido para casar com um WSL diferente do esperado.">
-              wslcsdk.dll em uso
-            </SectionTitle>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              <Fact label="Origem">
-                {native?.source ? SDK_SOURCES[native.source] : '-'}
-                {sdkPath !== null && native?.source !== 'custom' && (
-                  <Hint text="Você escolheu outra DLL, mas ela só entra em uso quando o app reabrir." />
-                )}
-              </Fact>
-              <Fact label="Tamanho">
-                <Mono>{native?.sizeBytes ? `${(native.sizeBytes / 1024 / 1024).toFixed(1)} MB` : '-'}</Mono>
-              </Fact>
-              <div className="sm:col-span-2">
-                <Fact label="Caminho">
-                  <Mono className="block truncate text-muted">{native?.dllPath ?? '-'}</Mono>
-                </Fact>
-              </div>
-              {sdkPath !== null && (
-                <div className="sm:col-span-2">
-                  <Fact label="Escolhida">
-                    <Mono className="block truncate text-muted">{sdkPath}</Mono>
-                  </Fact>
-                </div>
-              )}
-            </dl>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button isDisabled={pickingSdk} size="sm" onPress={() => void pickSdk()}>
-                <FolderSearch className="size-4" />
-                {pickingSdk ? 'Verificando…' : 'Escolher outra DLL…'}
-              </Button>
-              {sdkPath !== null && (
-                <Button size="sm" variant="ghost" onPress={() => void useBundledSdk()}>
-                  <Undo2 className="size-4" />
-                  Usar a empacotada
-                </Button>
-              )}
-            </div>
-            <p className="max-w-[80ch] text-sm leading-relaxed text-muted">
-              A versão da DLL decide o que o motor nativo consegue fazer, e como o app precisa chamá-la: entre
-              a 2.9.3 e a 2.9.9 duas funções mudaram de assinatura sem mudar nada visível. O app detecta isso
-              sozinho pela ABI e se adapta — mas a troca só vale ao reabrir, porque a sessão nativa viva
-              segura handles da DLL atual.
-            </p>
-          </section>
-
-          <section className="mt-5 flex flex-col gap-4 border-t border-separator pt-5">
-            <SectionTitle description="Limites da VM da sessão “WslcUi”. Campo vazio usa o padrão do WSL.">
-              Tuning da sessão nativa
-            </SectionTitle>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <TextInput
-                hint="Núcleos visíveis dentro da sessão."
-                label="CPUs"
-                placeholder="ex.: 2"
-                value={cpuCount}
-                onChange={setCpuCount}
-              />
-              <TextInput
-                hint="Limite de RAM da sessão, em MB."
-                label="Memória"
-                placeholder="ex.: 2048"
-                value={memoryMb}
-                onChange={setMemoryMb}
-              />
-              <TextInput
-                hint="Tamanho do disco virtual de storage, em MB."
-                label="VHD do storage"
-                placeholder="ex.: 10240"
-                value={vhdSizeMb}
-                onChange={setVhdSizeMb}
-              />
-              <SwitchInput
-                className="self-end pb-2"
-                hint="Expõe /dev/dxg na sessão, para cargas com GPU."
-                isSelected={gpu}
-                label="GPU na sessão"
-                onChange={setGpu}
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                isDisabled={savingTuning || !native?.available}
-                size="sm"
-                onPress={() => void saveTuning()}
-              >
-                <Save className="size-4" />
-                {savingTuning ? 'Salvando…' : 'Salvar tuning'}
-              </Button>
-              <Button
-                isDisabled={!native?.available}
-                size="sm"
-                variant="danger-soft"
-                onPress={() => void resetNative(loadEngine)}
-              >
-                <RotateCcw className="size-4" />
-                Resetar sessão nativa
-              </Button>
-            </div>
-          </section>
-        </Group>
-
-        <Group className="xl:col-span-2" title="Referências">
-          <ul className="flex flex-col gap-2 text-sm">
-            {LINKS.map((link) => (
-              <li key={link.href}>
-                <a className="text-accent hover:underline" href={link.href} rel="noreferrer" target="_blank">
-                  {link.label}
-                </a>
-              </li>
+      <Tabs className="min-h-0 flex-1 gap-0" defaultSelectedKey="ambiente" variant="secondary">
+        {/*
+         * O container precisa ser filho DIRETO do <Tabs>: a variante secondary
+         * é escrita em `.tabs--secondary > .tabs__list-container`, e foi por
+         * isso que a faixa não podia ficar dentro do <PageHeader>.
+         *
+         * page-bar dá a ela o mesmo material do cabeçalho (fundo da janela +
+         * grão), então título e abas leem como um bloco só. px-3 aqui + px-3 da
+         * aba = os 24px de sarjeta do conteúdo.
+         */}
+        <Tabs.ListContainer className="page-bar px-3">
+          <Tabs.List aria-label="Seções de Sistema">
+            {TABS.map(({ id, label, icon: Icon }) => (
+              <Tabs.Tab key={id} id={id}>
+                <Icon aria-hidden className="size-4" />
+                {label}
+                <Tabs.Indicator />
+              </Tabs.Tab>
             ))}
-          </ul>
-        </Group>
-      </PageBody>
+          </Tabs.List>
+        </Tabs.ListContainer>
+
+        {TABS.map(({ id }) => (
+          <Tabs.Panel key={id} className="min-h-0 flex-1 overflow-y-auto scrollbar" id={id}>
+            <PageBody>{PANELS[id]}</PageBody>
+          </Tabs.Panel>
+        ))}
+      </Tabs>
     </PageShell>
   )
 }

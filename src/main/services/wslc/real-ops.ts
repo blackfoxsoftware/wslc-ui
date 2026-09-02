@@ -45,6 +45,7 @@ import {
   inspectNativeVolume,
   listNativeVolumes
 } from './native/volumes'
+import { buildLogsArgs } from './stream-args'
 import { startStream } from './streams'
 import { openCliTerminal } from './terminal-cli'
 import type { HostOps, NativeOps, Ops, StreamOps } from './ops'
@@ -97,7 +98,7 @@ const nativeOps: NativeOps = {
 }
 
 const streamOps: StreamOps = {
-  logs: (id, sink) => startStream(WSLC, ['container', 'logs', '--follow', id], sink),
+  logs: (id, opts, sink) => startStream(WSLC, buildLogsArgs(id, opts), sink),
   pull: (ref, sink) => startStream(WSLC, ['image', 'pull', ref], sink),
   push: (ref, sink) => startStream(WSLC, ['push', ref], sink),
   load: (path, sink) => startStream(WSLC, ['image', 'load', '-i', path], sink),

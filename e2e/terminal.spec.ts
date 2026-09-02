@@ -26,7 +26,9 @@ for (const engine of ENGINES) {
       await row(page, 'web').getByRole('button', { name: 'Terminal', exact: true }).click()
 
       await expect(sheet(page)).toBeVisible()
-      await expect(sheet(page).getByText('conectado')).toBeVisible()
+      // Exato: sem isso, o "Conectado a …" que o shell imprime também casa, e
+      // o teste vira corrida entre o chip de status e a primeira linha do log.
+      await expect(sheet(page).getByText('conectado', { exact: true })).toBeVisible()
       await expect(screen(page)).toContainText('Conectado a')
 
       await page.keyboard.type('whoami')

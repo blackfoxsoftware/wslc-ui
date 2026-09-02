@@ -11,6 +11,7 @@ import { logError, logInfo, logWarn } from '../../logger'
 import {
   coTaskMemFree,
   hrHex,
+  hrText,
   hrOk,
   Keep,
   loadWslcSdk,
@@ -106,7 +107,7 @@ export function callNative(fn: NativeFn, ...args: unknown[]): Promise<number> {
 
 function fail(fnName: string, hr: number, message: unknown): never {
   const detail = typeof message === 'string' && message ? ` — ${message}` : ''
-  throw new Error(`${fnName} falhou: ${hrHex(hr)}${detail}`)
+  throw new Error(`${fnName} falhou: ${hrText(hr)}${detail}`)
 }
 
 const FEATURE_ENABLE_GPU = 0x4
@@ -366,7 +367,7 @@ export async function removeNativeImage(ref: string): Promise<CommandResult> {
     ok,
     code: ok ? 0 : 1,
     stdout: '',
-    stderr: ok ? '' : errOut[0] || `WslcDeleteSessionImage falhou: ${hrHex(hr)}`
+    stderr: ok ? '' : errOut[0] || `WslcDeleteSessionImage falhou: ${hrText(hr)}`
   }
 }
 

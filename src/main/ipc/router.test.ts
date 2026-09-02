@@ -50,6 +50,7 @@ function makeHandlers(overrides: Partial<InvokeHandlers> = {}): InvokeHandlers {
     'containers:open-terminal': () => undefined,
     'containers:kill': async () => okResult,
     'containers:export': async () => okResult,
+    'containers:copy': async () => okResult,
     'images:list': async () => [],
     'images:pull': async () => 2,
     'images:remove': async () => okResult,

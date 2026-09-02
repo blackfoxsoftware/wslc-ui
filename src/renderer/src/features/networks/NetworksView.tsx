@@ -26,6 +26,13 @@ import ConnectContainerDialog from './ConnectContainerDialog'
 import CreateNetworkDialog from './CreateNetworkDialog'
 import { useNetworksStore } from './store'
 
+/**
+ * As redes predefinidas do docker. A CLI wslc passou a listá-las na 2.9.9
+ * (antes só apareciam as redes gerenciadas pela sessão), e elas não podem ser
+ * removidas — oferecer o botão só renderia um erro.
+ */
+const PREDEFINIDAS = new Set(['bridge', 'host', 'none'])
+
 export default function NetworksView(): React.JSX.Element {
   const networks = useNetworksStore((s) => s.networks)
   const error = useNetworksStore((s) => s.error)
@@ -174,12 +181,15 @@ export default function NetworksView(): React.JSX.Element {
                         </Dropdown.Item>
                         <Dropdown.Item
                           id="remove"
+                          isDisabled={PREDEFINIDAS.has(net.name)}
                           textValue="Remover"
                           variant="danger"
                           onAction={() => void remove(net)}
                         >
                           <Trash2 className="size-4" />
-                          <Label>Remover</Label>
+                          <Label>
+                            {PREDEFINIDAS.has(net.name) ? 'Remover (rede predefinida)' : 'Remover'}
+                          </Label>
                         </Dropdown.Item>
                       </Dropdown.Menu>
                     </Dropdown.Popover>

@@ -91,6 +91,42 @@ for (const engine of ENGINES) {
 }
 
 test.describe('Volumes · diferenças entre os motores', () => {
+  // A wslc 2.9.9 passou a criar VHDX pela CLI (`volume create -d vhd -o
+  // SizeBytes=…`), com as mesmas opções do SDK. Antes disso o disco virtual só
+  // existia no motor nativo, e o diálogo nem mostrava os campos aqui.
+  test('na CLI dá para escolher o driver vhd e os campos do disco aparecem', async ({ page }) => {
+    await goToVolumes(page)
+    await page.getByRole('button', { name: 'Criar volume' }).click()
+    const dialog = modal(page)
+
+    await expect(dialog.getByLabel('Tamanho')).toHaveCount(0)
+
+    await fillField(dialog, 'Nome do volume', 'e2e-vhd')
+    await chooseOption(page, dialog.locator('[data-slot="select-trigger"]').first(), 'vhd')
+    await fillField(dialog, 'Tamanho', '512')
+
+    await dialog.getByRole('button', { name: 'Criar volume' }).click()
+    await expectToast(page, 'Volume "e2e-vhd" criado.')
+    await expect(row(page, 'e2e-vhd')).toContainText('vhd')
+  })
+
+  // -l entrou no `volume create` da 2.9.9. O SDK não guarda metadados, então
+  // o campo não existe no motor nativo.
+  test('na CLI dá para rotular o volume, e o inspect mostra o rótulo', async ({ page }) => {
+    await goToVolumes(page)
+    await page.getByRole('button', { name: 'Criar volume' }).click()
+    const dialog = modal(page)
+
+    await fillField(dialog, 'Nome do volume', 'e2e-rotulado')
+    await fillField(dialog, 'Labels', 'app=site, env=dev')
+    await dialog.getByRole('button', { name: 'Criar volume' }).click()
+    await expectToast(page, 'Volume "e2e-rotulado" criado.')
+
+    await row(page, 'e2e-rotulado').getByRole('button', { name: 'Inspecionar volume' }).click()
+    await expect(sheet(page).getByText('"app": "site"')).toBeVisible()
+    await closeSheet(page)
+  })
+
   test('na CLI o volume tem escopo e existe limpeza dos sem uso', async ({ page }) => {
     await goToVolumes(page)
     await expect(page.getByRole('columnheader', { name: 'Escopo' })).toBeVisible()
@@ -109,6 +145,12 @@ test.describe('Volumes · diferenças entre os motores', () => {
       await expect(page.getByRole('columnheader', { name: 'Tamanho' })).toBeVisible()
       await expect(row(page, 'dados-nativos')).toContainText('1.07GB')
       await expect(row(page, 'dados-nativos')).toContainText('vhd')
+    })
+
+    test('não oferece labels (o SDK não guarda metadados)', async ({ page }) => {
+      await goToVolumes(page)
+      await page.getByRole('button', { name: 'Criar volume' }).click()
+      await expect(modal(page).getByRole('textbox', { name: 'Labels' })).toHaveCount(0)
     })
 
     test('não oferece limpeza de volumes sem uso', async ({ page }) => {

@@ -37,6 +37,62 @@ const db: ContainerInfo = {
 }
 
 describe('useContainersStore', () => {
+  /**
+   * Remover container em execução é erro na CLI. Em vez de um segundo item de
+   * menu perigoso, a saída forçada aparece no toast da falha — e só ali, para
+   * quem já viu o motivo. Um segundo erro (já forçado) não oferece de novo.
+   */
+  it('remove que falha oferece forçar no toast, e o botão repete com -f', async () => {
+    const api = installWslcApiMock({
+      containerAction: vi.fn(async () => ({
+        ok: false,
+        code: 1,
+        stdout: '',
+        stderr: 'ele está em execução'
+      }))
+    })
+
+    await useContainersStore.getState().applyAction('remove', web)
+
+    expect(api.containerAction).toHaveBeenCalledWith('remove', 'a1b2c3', undefined)
+    const [, opcoes] = vi.mocked(toast.danger).mock.calls[0]
+    expect(opcoes?.actionProps?.children).toBe('Remover mesmo assim')
+
+    // Clicar em "Remover mesmo assim" repete a ação, agora com força.
+    opcoes?.actionProps?.onPress?.({} as never)
+    await vi.waitFor(() => {
+      expect(api.containerAction).toHaveBeenCalledWith('remove', 'a1b2c3', { force: true })
+      expect(vi.mocked(toast.danger).mock.calls).toHaveLength(2)
+    })
+    // A segunda falha não volta a oferecer: já foi forçada.
+    expect(vi.mocked(toast.danger).mock.calls[1][1]).toBeUndefined()
+  })
+
+  it('copy repassa os caminhos e conta o sentido no toast', async () => {
+    const api = installWslcApiMock()
+
+    const ok = await useContainersStore.getState().copy(
+      {
+        container: 'a1b2c3',
+        direction: 'to-container',
+        hostPath: 'C:\\app\\site.conf',
+        containerPath: '/etc/nginx/site.conf'
+      },
+      // O que vai para a CLI é o id; o nome só aparece no aviso.
+      'web'
+    )
+
+    expect(ok).toBe(true)
+    expect(api.copyToContainer).toHaveBeenCalledWith({
+      container: 'a1b2c3',
+      direction: 'to-container',
+      hostPath: 'C:\\app\\site.conf',
+      containerPath: '/etc/nginx/site.conf'
+    })
+    expect(toast.success).toHaveBeenCalledWith('Copiado C:\\app\\site.conf → web:/etc/nginx/site.conf.')
+    expect(useContainersStore.getState().busyId).toBeNull()
+  })
+
   it('refresh usa o flag showAll e limpa o erro', async () => {
     const api = installWslcApiMock({ listContainers: vi.fn(async () => [web]) })
 
@@ -62,7 +118,7 @@ describe('useContainersStore', () => {
   it('applyAction com sucesso emite toast semântico e libera o busyId', async () => {
     const api = installWslcApiMock()
     await useContainersStore.getState().applyAction('stop', web)
-    expect(api.containerAction).toHaveBeenCalledWith('stop', 'a1b2c3')
+    expect(api.containerAction).toHaveBeenCalledWith('stop', 'a1b2c3', undefined)
     expect(toast.success).toHaveBeenCalledWith('Container "web" parado.')
     expect(useContainersStore.getState().busyId).toBeNull()
   })
@@ -81,8 +137,10 @@ describe('useContainersStore', () => {
     const api = installWslcApiMock({ listContainers: vi.fn(async () => [web, db]) })
     await useContainersStore.getState().removeAll()
     expect(api.containerAction).toHaveBeenCalledWith('stop', 'a1b2c3')
-    expect(api.containerAction).toHaveBeenCalledWith('remove', 'a1b2c3')
-    expect(api.containerAction).toHaveBeenCalledWith('remove', 'f6e5d4')
+    // Em massa o remove vai forçado: entre parar e remover, um container com
+    // --restart volta, e a lista já pode ter envelhecido.
+    expect(api.containerAction).toHaveBeenCalledWith('remove', 'a1b2c3', { force: true })
+    expect(api.containerAction).toHaveBeenCalledWith('remove', 'f6e5d4', { force: true })
     expect(api.containerAction).not.toHaveBeenCalledWith('stop', 'f6e5d4')
     expect(toast.success).toHaveBeenCalledWith('2 container(s) removido(s).')
   })

@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 import type { CommandResult } from '@shared/schemas'
 import { logError, logInfo } from '../../logger'
 import { allocStreamId, registerStream, releaseStream, type StreamSink } from '../streams'
-import { hrHex, hrOk, Keep, registerCallback, unregisterCallback, type WslcSdk } from './bindings'
+import { hrText, hrOk, Keep, registerCallback, unregisterCallback, type WslcSdk } from './bindings'
 import { splitImageRef } from './images'
 import { ProgressTracker } from './progress'
 import { registryAuthFor, storedRegistryAuthFor } from './registry'
@@ -131,7 +131,7 @@ function runImageTransfer(ref: string, sink: StreamSink, spec: TransferSpec): nu
         )
         finishJob(job, 0, spec.doneLine)
       } else {
-        const message = errOut[0] || `${spec.label} falhou: ${hrHex(hr)}`
+        const message = errOut[0] || `${spec.label} falhou: ${hrText(hr)}`
         logError('native', `${spec.label} nativo #${streamId} falhou (${ref})`, message)
         finishJob(job, 1, `Erro: ${message}`)
       }
@@ -233,7 +233,7 @@ function runTarballStream(sink: StreamSink, firstLine: string, doneLine: string,
         logInfo('native', doneLine)
         finishJob(job, 0, doneLine)
       } else {
-        const message = errOut[0] || `Falhou: ${hrHex(hr)}`
+        const message = errOut[0] || `Falhou: ${hrText(hr)}`
         logError('native', firstLine, message)
         finishJob(job, 1, `Erro: ${message}`)
       }
@@ -293,7 +293,7 @@ export async function tagNativeImage(source: string, target: string): Promise<Co
         ok: false,
         code: 1,
         stdout: '',
-        stderr: errOut[0] || `WslcTagSessionImage falhou: ${hrHex(hr)}`
+        stderr: errOut[0] || `WslcTagSessionImage falhou: ${hrText(hr)}`
       }
     }
     logInfo('native', `Tag criada: ${source} → ${target}`)

@@ -2,7 +2,10 @@ import type { BrowserWindow } from 'electron'
 import type {
   CommandResult,
   ContainerAction,
+  ContainerActionOptions,
   ContainerInfo,
+  ContainerLogsOptions,
+  ExecOptions,
   ImageInfo,
   InstallProgressEvent,
   NativeCrashDumpEvent,
@@ -61,10 +64,12 @@ export interface NativeOps {
 
   // — containers —
   listContainers(all: boolean): Promise<ContainerInfo[]>
-  containerAction(action: ContainerAction, id: string): Promise<CommandResult>
+  /** O SDK honra sinal e espera no stop; o remove dele é sempre forçado. */
+  containerAction(action: ContainerAction, id: string, opts?: ContainerActionOptions): Promise<CommandResult>
   pruneContainers(): Promise<CommandResult>
   runContainer(opts: RunContainerOptions): Promise<CommandResult>
-  exec(id: string, command: string): Promise<CommandResult>
+  /** Das opções do exec, o SDK só tem diretório de trabalho e variáveis. */
+  exec(id: string, command: string, opts?: ExecOptions): Promise<CommandResult>
   inspectContainer(id: string): Promise<CommandResult>
   killContainer(id: string, signal?: string): Promise<CommandResult>
   streamLogs(id: string, sink: StreamSink): number
@@ -90,7 +95,7 @@ export interface NativeOps {
 
 /** Operações de longa duração do motor CLI (spawn do wslc.exe com pipes). */
 export interface StreamOps {
-  logs(id: string, sink: StreamSink): number
+  logs(id: string, opts: ContainerLogsOptions | undefined, sink: StreamSink): number
   pull(ref: string, sink: StreamSink): number
   push(ref: string, sink: StreamSink): number
   load(path: string, sink: StreamSink): number

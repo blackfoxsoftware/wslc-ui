@@ -69,12 +69,30 @@ export function createMockWslcService(): WslcService {
     { repository: 'alpine', tag: 'latest', id: 'sha256ccc333', created: 'há 2 semanas', size: '5.6 MB' }
   ]
 
+  // Os drivers e o mountpoint imitam a wslc 2.9.9: `guest` é o padrão e o
+  // `vhd` passou a existir também na CLI (era exclusivo do motor nativo).
   const volumes: VolumeInfo[] = [
-    { name: 'pgdata', driver: 'local', mountpoint: '/var/lib/wslc/volumes/pgdata', scope: 'local' },
-    { name: 'site-static', driver: 'local', mountpoint: '/var/lib/wslc/volumes/site-static', scope: 'local' }
+    { name: 'pgdata', driver: 'guest', mountpoint: '/var/lib/docker/volumes/pgdata/_data', scope: 'local' },
+    {
+      name: 'site-static',
+      driver: 'guest',
+      mountpoint: '/var/lib/docker/volumes/site-static/_data',
+      scope: 'local'
+    }
   ]
 
-  const networks: NetworkInfo[] = [{ id: 'f5287a761725', name: 'frontend', driver: 'bridge' }]
+  // A CLI 2.9.9 passou a listar as redes predefinidas do docker junto com as
+  // gerenciadas pela sessão — elas aparecem, mas não podem ser removidas.
+  const networks: NetworkInfo[] = [
+    { id: 'd2a0fec3fd2a', name: 'bridge', driver: 'bridge' },
+    { id: 'f5287a761725', name: 'frontend', driver: 'bridge' },
+    { id: '8f1013ae0e91', name: 'host', driver: 'host' },
+    { id: 'ff9c46352e43', name: 'none', driver: 'null' }
+  ]
+
+  // Labels dos volumes: a CLI aceita -l, mas `volume list` não os mostra —
+  // guardamos aqui para o `volume inspect` refletir o que foi pedido.
+  const volumeLabels = new Map<string, string[]>()
 
   let nextId = 1
 
@@ -125,13 +143,26 @@ export function createMockWslcService(): WslcService {
       return [...images]
     },
 
-    async containerAction(action, id) {
+    async containerAction(action, id, opts) {
       if (shouldFail('containers:action')) return failure('containers:action', `Falha ao ${action}.`)
       const c = containers.find((x) => x.id === id || x.name === id)
       if (!c) return { ok: false, code: 1, stdout: '', stderr: `container não encontrado: ${id}` }
-      if (action === 'remove') containers.splice(containers.indexOf(c), 1)
-      else if (action === 'stop') Object.assign(c, { state: 'exited', status: 'Exited (0) agora' })
-      else Object.assign(c, { state: 'running', status: 'Up agora' })
+      if (action === 'remove') {
+        // Como a CLI: remover container em execução exige -f. É o que faz a
+        // UI oferecer "forçar" no toast em vez de esconder a ação.
+        if (c.state === 'running' && !opts?.force) {
+          return {
+            ok: false,
+            code: 1,
+            stdout: '',
+            stderr: `Não é possível remover o contêiner "${c.name}": ele está em execução. Pare-o antes ou use a remoção forçada.`
+          }
+        }
+        containers.splice(containers.indexOf(c), 1)
+      } else if (action === 'stop') {
+        const sinal = opts?.signal?.trim() ? ` por ${opts.signal.trim()}` : ''
+        Object.assign(c, { state: 'exited', status: `Exited (0) agora${sinal}` })
+      } else Object.assign(c, { state: 'running', status: 'Up agora' })
       return ok()
     },
 
@@ -158,9 +189,18 @@ export function createMockWslcService(): WslcService {
       return ok()
     },
 
-    async execInContainer(_id, command) {
+    async execInContainer(_id, command, opts) {
       if (shouldFail('containers:exec')) return failure('containers:exec', 'Falha ao executar o comando.')
-      return ok(`(mock) executado: ${command}\nLinux mock-container 6.6.87 x86_64 GNU/Linux\n`)
+      // Desanexado não devolve saída (a CLI volta antes do processo terminar).
+      if (opts?.detach) return ok()
+      const onde = opts?.workdir?.trim() ? ` em ${opts.workdir.trim()}` : ''
+      const quem = opts?.user?.trim() ? ` como ${opts.user.trim()}` : ''
+      const vars = (opts?.env ?? []).filter((e) => e.trim())
+      return ok(
+        `(mock) executado${quem}${onde}: ${command}\n` +
+          (vars.length > 0 ? `(mock) variáveis: ${vars.join(' ')}\n` : '') +
+          'Linux mock-container 6.6.87 x86_64 GNU/Linux\n'
+      )
     },
 
     async getStats() {
@@ -204,9 +244,19 @@ export function createMockWslcService(): WslcService {
       )
     },
 
-    async removeImage(ref) {
+    async removeImage(ref, opts) {
       if (shouldFail('images:remove')) return failure('images:remove', `Falha ao remover "${ref}".`)
       const idx = images.findIndex((i) => `${i.repository}:${i.tag}` === ref || i.id === ref)
+      // Como a CLI: imagem usada por um container só sai com -f.
+      const emUso = containers.find((c) => c.image === ref)
+      if (idx >= 0 && emUso && !opts?.force) {
+        return {
+          ok: false,
+          code: 1,
+          stdout: '',
+          stderr: `Não é possível remover a imagem "${ref}": ela está em uso pelo contêiner "${emUso.name}".`
+        }
+      }
       if (idx >= 0) images.splice(idx, 1)
       return ok()
     },
@@ -272,19 +322,33 @@ export function createMockWslcService(): WslcService {
       return [...volumes]
     },
 
-    async createVolume(name) {
+    async createVolume(name, vhd, labels) {
       if (shouldFail('volumes:create')) return failure('volumes:create', `Falha ao criar o volume "${name}".`)
       if (volumes.some((v) => v.name === name)) {
         return { ok: false, code: 1, stdout: '', stderr: `volume já existe: ${name}` }
       }
-      volumes.push({ name, driver: 'local', mountpoint: `/var/lib/wslc/volumes/${name}`, scope: 'local' })
+      volumes.push({
+        name,
+        driver: vhd ? 'vhd' : 'guest',
+        mountpoint: `/var/lib/docker/volumes/${name}/_data`,
+        scope: 'local'
+      })
+      volumeLabels.set(
+        name,
+        (labels ?? []).filter((l) => l.trim())
+      )
       return ok()
     },
 
-    async removeVolume(name) {
+    async removeVolume(name, force) {
       if (shouldFail('volumes:remove')) return failure('volumes:remove', `Falha ao remover "${name}".`)
       const idx = volumes.findIndex((v) => v.name === name)
-      if (idx >= 0) volumes.splice(idx, 1)
+      // -f aqui é idempotência: sem ele, remover o que não existe é erro.
+      if (idx < 0) {
+        return force ? ok() : { ok: false, code: 1, stdout: '', stderr: `volume não encontrado: ${name}` }
+      }
+      volumes.splice(idx, 1)
+      volumeLabels.delete(name)
       return ok()
     },
 
@@ -304,7 +368,12 @@ export function createMockWslcService(): WslcService {
               Name: vol.name,
               Driver: vol.driver,
               CreatedAt: '2026-09-01T12:00:00Z',
-              Labels: {},
+              Labels: Object.fromEntries(
+                (volumeLabels.get(vol.name) ?? []).map((l) => {
+                  const i = l.indexOf('=')
+                  return i < 0 ? [l, ''] : [l.slice(0, i), l.slice(i + 1)]
+                })
+              ),
               Status: null
             }
           ],
@@ -327,6 +396,17 @@ export function createMockWslcService(): WslcService {
       const c = containers.find((x) => x.id === id || x.name === id)
       if (!c) return { ok: false, code: 1, stdout: '', stderr: `container não encontrado: ${id}` }
       return ok()
+    },
+
+    async copyFiles(opts) {
+      if (shouldFail('containers:copy')) return failure('containers:copy', 'Falha ao copiar os arquivos.')
+      const c = containers.find((x) => x.id === opts.container || x.name === opts.container)
+      if (!c) {
+        return { ok: false, code: 1, stdout: '', stderr: `container não encontrado: ${opts.container}` }
+      }
+      const dentro = `${c.name}:${opts.containerPath}`
+      const [de, para] = opts.direction === 'to-container' ? [opts.hostPath, dentro] : [dentro, opts.hostPath]
+      return ok(`(mock) copiado ${de} → ${para}\n`)
     },
 
     async logout(server) {
@@ -354,10 +434,13 @@ export function createMockWslcService(): WslcService {
       return ok(opts.name)
     },
 
-    async removeNetwork(name) {
+    async removeNetwork(name, force) {
       if (shouldFail('networks:remove')) return failure('networks:remove', `Falha ao remover "${name}".`)
       const idx = networks.findIndex((n) => n.name === name || n.id === name)
-      if (idx < 0) return { ok: false, code: 1, stdout: '', stderr: `Rede não encontrada: '${name}'` }
+      // -f aqui é idempotência (não é remoção forçada): cala o "não existe".
+      if (idx < 0) {
+        return force ? ok() : { ok: false, code: 1, stdout: '', stderr: `Rede não encontrada: '${name}'` }
+      }
       networks.splice(idx, 1)
       return ok()
     },
@@ -391,22 +474,31 @@ export function createMockWslcService(): WslcService {
       )
     },
 
-    async connectNetwork(network, container) {
+    async connectNetwork(opts) {
       if (shouldFail('networks:connect')) {
         return failure('networks:connect', 'Falha ao conectar o container.')
       }
-      const net = networks.find((n) => n.name === network || n.id === network)
-      if (!net) return { ok: false, code: 1, stdout: '', stderr: `Rede não encontrada: '${network}'` }
-      const c = containers.find((x) => x.id === container || x.name === container)
-      if (!c) return { ok: false, code: 1, stdout: '', stderr: `container não encontrado: ${container}` }
-      return ok()
+      const net = networks.find((n) => n.name === opts.network || n.id === opts.network)
+      if (!net) {
+        return { ok: false, code: 1, stdout: '', stderr: `Rede não encontrada: '${opts.network}'` }
+      }
+      const c = containers.find((x) => x.id === opts.container || x.name === opts.container)
+      if (!c) {
+        return { ok: false, code: 1, stdout: '', stderr: `container não encontrado: ${opts.container}` }
+      }
+      const alias = (opts.aliases ?? []).filter((a) => a.trim())
+      const detalhe = [
+        alias.length > 0 ? `aliases ${alias.join(', ')}` : '',
+        opts.ip?.trim() ? `ip ${opts.ip.trim()}` : ''
+      ].filter(Boolean)
+      return ok(detalhe.length > 0 ? `(mock) conectado com ${detalhe.join(' e ')}\n` : '')
     },
 
     async disconnectNetwork(network, container) {
       if (shouldFail('networks:disconnect')) {
         return failure('networks:disconnect', 'Falha ao desconectar o container.')
       }
-      return this.connectNetwork(network, container)
+      return this.connectNetwork({ network, container })
     },
 
     async terminateSession() {

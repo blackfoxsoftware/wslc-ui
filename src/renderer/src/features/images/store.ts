@@ -1,6 +1,6 @@
 import { toast } from '@/design'
 import { create } from 'zustand'
-import type { ImageInfo } from '@shared/schemas'
+import type { ImageInfo, RemoveImageOptions } from '@shared/schemas'
 import { errorMessage } from '../../lib/errors'
 
 const refOf = (image: ImageInfo): string =>
@@ -10,7 +10,7 @@ interface ImagesState {
   images: ImageInfo[]
   error: string | null
   refresh: () => Promise<void>
-  remove: (image: ImageInfo) => Promise<void>
+  remove: (image: ImageInfo, opts?: RemoveImageOptions) => Promise<void>
   pruneUnused: () => Promise<void>
   removeAll: () => Promise<void>
   /** Retorna true se a tag foi criada (para fechar o diálogo). */
@@ -30,12 +30,28 @@ export const useImagesStore = create<ImagesState>()((set, get) => ({
       set({ error: errorMessage(e) })
     }
   },
-  remove: async (image) => {
+  remove: async (image, opts) => {
     const ref = refOf(image)
-    const res = await window.wslcApi.removeImage(ref)
+    const res = await window.wslcApi.removeImage(ref, opts)
     await get().refresh()
-    if (res.ok) toast.success(`Imagem "${ref}" removida.`)
-    else toast.danger(res.stderr || res.stdout || `Falha ao remover a imagem "${ref}".`)
+    if (res.ok) {
+      toast.success(`Imagem "${ref}" removida.`)
+      return
+    }
+    const erro = res.stderr || res.stdout || `Falha ao remover a imagem "${ref}".`
+    // Imagem em uso por um container só sai com -f: a saída forçada aparece
+    // no toast da falha, e não como um item de menu que engana quem clica.
+    if (!opts?.force) {
+      toast.danger(erro, {
+        timeout: 10_000,
+        actionProps: {
+          children: 'Remover mesmo assim',
+          onPress: () => void get().remove(image, { force: true })
+        }
+      })
+      return
+    }
+    toast.danger(erro)
   },
   tag: async (source, target) => {
     const res = await window.wslcApi.tagImage(source, target)
@@ -70,7 +86,9 @@ export const useImagesStore = create<ImagesState>()((set, get) => ({
     // Sequencial de propósito: não sobrecarregar a CLI do wslc.
     // oxlint-disable no-await-in-loop
     for (const image of all) {
-      const res = await window.wslcApi.removeImage(refOf(image))
+      // Força porque a ordem importa: remover a base antes da derivada falha
+      // se alguma imagem ainda estiver em uso por um container parado.
+      const res = await window.wslcApi.removeImage(refOf(image), { force: true })
       if (!res.ok) failures++
     }
     // oxlint-enable no-await-in-loop

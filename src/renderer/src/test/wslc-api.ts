@@ -44,6 +44,7 @@ export function installWslcApiMock(overrides: Partial<WslcApi> = {}): WslcApi {
     openContainerTerminal: vi.fn(async () => undefined),
     killContainer: vi.fn(async () => okResult()),
     exportContainer: vi.fn(async () => okResult()),
+    copyToContainer: vi.fn(async () => okResult()),
     removeImage: vi.fn(async () => okResult()),
     inspectImage: vi.fn(async () => okResult()),
     tagImage: vi.fn(async () => okResult()),

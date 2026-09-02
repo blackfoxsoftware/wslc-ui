@@ -13,9 +13,11 @@ import {
   ListBox,
   Notice,
   Select,
+  SelectInput,
   Separator,
   SwitchInput,
   Tabs,
+  TextAreaInput,
   TextInput,
   toast
 } from '@/design'
@@ -58,6 +60,16 @@ const splitList = (raw: string): string[] =>
     .filter(Boolean)
 
 const NO_NETWORK = '__none__'
+
+/**
+ * `--pull` da CLI: quando consultar o registry. 'missing' é o padrão e não
+ * vai para a linha de comando.
+ */
+const PULL_POLICIES = [
+  { id: 'missing', label: 'Se faltar (padrão)', description: 'Só baixa quando a imagem não está local' },
+  { id: 'always', label: 'Sempre', description: 'Consulta o registry a cada execução' },
+  { id: 'never', label: 'Nunca', description: 'Falha se a imagem não estiver local' }
+] as const
 
 interface PairListProps {
   rows: PairRow[]
@@ -161,6 +173,7 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
   const [networks, setNetworks] = useState<NetworkInfo[]>([])
   const [network, setNetwork] = useState(NO_NETWORK)
   const [networkAliases, setNetworkAliases] = useState('')
+  const [ip, setIp] = useState('')
   const [hostname, setHostname] = useState('')
   const [domainname, setDomainname] = useState('')
   const [dns, setDns] = useState('')
@@ -169,9 +182,14 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
   const [publishAll, setPublishAll] = useState(false)
   // Volumes extras
   const [tmpfs, setTmpfs] = useState('')
+  // Uma especificação --mount por linha: elas têm vírgula dentro
+  // (type=bind,source=…,target=…), então vírgula não serve de separador.
+  const [mounts, setMounts] = useState('')
   // Avançado
   const [entrypoint, setEntrypoint] = useState('')
   const [workdir, setWorkdir] = useState('')
+  const [pull, setPull] = useState<RunContainerOptions['pull']>('missing')
+  const [createOnly, setCreateOnly] = useState(false)
   const [user, setUser] = useState('')
   const [labels, setLabels] = useState('')
   const [stopSignal, setStopSignal] = useState('')
@@ -271,6 +289,13 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
         : {
             network: network !== NO_NETWORK ? network : undefined,
             networkAliases: splitList(networkAliases),
+            ip: ip.trim() || undefined,
+            mounts: mounts
+              .split('\n')
+              .map((m) => m.trim())
+              .filter(Boolean),
+            pull,
+            createOnly: createOnly || undefined,
             publishAll: publishAll || undefined,
             user: user.trim() || undefined,
             cpus: cpus.trim() || undefined,
@@ -303,7 +328,12 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
         ...cliOnly
       })
       if (res.ok) {
-        toast.success(`Container ${name.trim() ? `"${name.trim()}" ` : ''}iniciado a partir de ${image}.`)
+        const nome = name.trim() ? `"${name.trim()}" ` : ''
+        toast.success(
+          createOnly
+            ? `Container ${nome}criado a partir de ${image} — inicie quando quiser.`
+            : `Container ${nome}iniciado a partir de ${image}.`
+        )
         onDone()
       } else {
         setError(res.stderr || res.stdout || 'Falha ao executar o container')
@@ -327,7 +357,15 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
             Cancelar
           </Button>
           <Button isDisabled={running || !image.trim()} onPress={() => void submit()}>
-            {running ? 'Executando…' : willPull ? 'Baixar e executar' : 'Executar'}
+            {running
+              ? createOnly
+                ? 'Criando…'
+                : 'Executando…'
+              : createOnly
+                ? 'Criar sem iniciar'
+                : willPull
+                  ? 'Baixar e executar'
+                  : 'Executar'}
           </Button>
         </>
       }
@@ -417,12 +455,30 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
             }}
           />
 
+          {!nativeEngine && (
+            <SelectInput
+              hint="Quando consultar o registry antes de subir (--pull)."
+              label="Buscar a imagem"
+              options={PULL_POLICIES}
+              value={pull ?? 'missing'}
+              onChange={(v) => setPull(v as RunContainerOptions['pull'])}
+            />
+          )}
+
           <SwitchRow
-            hint="Mantém o container rodando após iniciar (-d)."
-            isSelected={detach}
+            hint="Mantém o container rodando após iniciar (-d). Sem efeito quando o container nasce parado."
+            isSelected={detach && !createOnly}
             label="Executar em segundo plano"
             onChange={setDetach}
           />
+          {!nativeEngine && (
+            <SwitchRow
+              hint="Usa `container create`: prepara o container com toda esta configuração e deixa parado, para iniciar depois."
+              isSelected={createOnly}
+              label="Criar sem iniciar"
+              onChange={setCreateOnly}
+            />
+          )}
         </Tabs.Panel>
 
         <Tabs.Panel className="flex flex-col gap-4 pt-4" id="network">
@@ -498,6 +554,14 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
                   onChange={setNetworkAliases}
                 />
               </div>
+              <TextInput
+                isDisabled={network === NO_NETWORK}
+                hint="IPv4 fixo dentro da rede escolhida (--ip). Precisa estar na sub-rede dela."
+                label="Endereço IP"
+                placeholder="ex.: 172.20.0.10"
+                value={ip}
+                onChange={setIp}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <TextInput
                   hint="Servidores consultados dentro do container. Separe por vírgula."
@@ -584,13 +648,23 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
             </div>
           </div>
           {!nativeEngine && (
-            <TextInput
-              hint="Pontos de montagem em memória, separados por vírgula."
-              label="Montagens tmpfs"
-              placeholder="ex.: /cache, /tmp/build"
-              value={tmpfs}
-              onChange={setTmpfs}
-            />
+            <>
+              <TextInput
+                hint="Pontos de montagem em memória, separados por vírgula."
+                label="Montagens tmpfs"
+                placeholder="ex.: /cache, /tmp/build"
+                value={tmpfs}
+                onChange={setTmpfs}
+              />
+              <TextAreaInput
+                hint="Forma completa da montagem (--mount), uma por linha. Aceita opções que o -v não tem, como readonly e bind-propagation."
+                label="Montagens detalhadas"
+                placeholder={'type=bind,source=C:\\projeto,target=/app,readonly'}
+                rows={3}
+                value={mounts}
+                onChange={setMounts}
+              />
+            </>
           )}
         </Tabs.Panel>
 

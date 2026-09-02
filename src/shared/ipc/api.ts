@@ -1,12 +1,17 @@
 import type {
   BuildImageOptions,
   CommandResult,
+  ConnectNetworkOptions,
   ContainerAction,
+  ContainerActionOptions,
+  ContainerCopyOptions,
   ContainerInfo,
+  ContainerLogsOptions,
   ContainerStats,
   CreateNetworkOptions,
   Engine,
   EngineStatus,
+  ExecOptions,
   ImageInfo,
   InstallProgressEvent,
   LogEntry,
@@ -16,6 +21,7 @@ import type {
   NativeTuning,
   NetworkInfo,
   RegistryImage,
+  RemoveImageOptions,
   RunContainerOptions,
   SdkProbe,
   StreamDataEvent,
@@ -36,10 +42,12 @@ export interface WslcApi {
   getEnvironment(): Promise<WslcEnvironment>
   listContainers(all: boolean): Promise<ContainerInfo[]>
   listImages(): Promise<ImageInfo[]>
-  containerAction(action: ContainerAction, id: string): Promise<CommandResult>
+  /** `opts` traz sinal/espera do stop e forçar/volumes do remove. */
+  containerAction(action: ContainerAction, id: string, opts?: ContainerActionOptions): Promise<CommandResult>
   pruneContainers(): Promise<CommandResult>
   runContainer(opts: RunContainerOptions): Promise<CommandResult>
-  execInContainer(id: string, command: string): Promise<CommandResult>
+  /** No motor nativo só o diretório de trabalho e as variáveis têm efeito. */
+  execInContainer(id: string, command: string, opts?: ExecOptions): Promise<CommandResult>
   getStats(): Promise<ContainerStats[]>
   inspectContainer(id: string): Promise<CommandResult>
   /** Abre uma janela de terminal do Windows com shell interativo no container. */
@@ -48,7 +56,10 @@ export interface WslcApi {
   killContainer(id: string, signal?: string): Promise<CommandResult>
   /** Exporta o filesystem do container como tarball (CLI `container export`). */
   exportContainer(id: string, path: string): Promise<CommandResult>
-  removeImage(ref: string): Promise<CommandResult>
+  /** Copia arquivos host ↔ container (`container cp`; não existe no SDK). */
+  copyToContainer(opts: ContainerCopyOptions): Promise<CommandResult>
+  /** `opts.force` remove mesmo em uso; `noPrune` mantém as camadas pai. */
+  removeImage(ref: string, opts?: RemoveImageOptions): Promise<CommandResult>
   pruneImages(): Promise<CommandResult>
   inspectImage(ref: string): Promise<CommandResult>
   tagImage(source: string, target: string): Promise<CommandResult>
@@ -67,20 +78,22 @@ export interface WslcApi {
   /** Logout: descarta as credenciais guardadas. Server vazio = registry padrão. */
   registryLogout(server: string): Promise<CommandResult>
   listVolumes(): Promise<VolumeInfo[]>
-  /** `vhd` cria um volume VHDX na sessão nativa (o motor CLI ignora as opções). */
-  createVolume(name: string, vhd?: VhdVolumeOptions): Promise<CommandResult>
-  removeVolume(name: string): Promise<CommandResult>
+  /** `vhd` cria um volume VHDX; `labels` só valem no motor CLI (-l). */
+  createVolume(name: string, vhd?: VhdVolumeOptions, labels?: string[]): Promise<CommandResult>
+  /** `force` é o -f da CLI: não erra se o volume já não existir. */
+  removeVolume(name: string, force?: boolean): Promise<CommandResult>
   pruneVolumes(): Promise<CommandResult>
   /** JSON de inspeção do volume (nativo: metadados do arquivo .vhdx). */
   inspectVolume(name: string): Promise<CommandResult>
   /** Redes da CLI (o SDK nativo não expõe redes). */
   listNetworks(): Promise<NetworkInfo[]>
   createNetwork(opts: CreateNetworkOptions): Promise<CommandResult>
-  removeNetwork(name: string): Promise<CommandResult>
+  /** `force` é o -f da CLI: não erra se a rede já não existir. */
+  removeNetwork(name: string, force?: boolean): Promise<CommandResult>
   /** Remove redes sem containers conectados (sem confirmação da CLI!). */
   pruneNetworks(): Promise<CommandResult>
   inspectNetwork(name: string): Promise<CommandResult>
-  connectNetwork(network: string, container: string): Promise<CommandResult>
+  connectNetwork(opts: ConnectNetworkOptions): Promise<CommandResult>
   disconnectNetwork(network: string, container: string): Promise<CommandResult>
   terminateSession(): Promise<CommandResult>
   /** Sessões wslc ativas (`system session list`). */
@@ -132,7 +145,8 @@ export interface WslcApi {
   installUpdate(): Promise<void>
   /** Cada transição do updater: checou, achou, baixou, falhou. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
-  streamLogs(id: string): Promise<number>
+  /** As opções valem no motor CLI; no nativo o log vem inteiro por callback. */
+  streamLogs(id: string, opts?: ContainerLogsOptions): Promise<number>
   pullImage(ref: string): Promise<number>
   stopStream(streamId: number): Promise<void>
   onStreamData(cb: (ev: StreamDataEvent) => void): () => void

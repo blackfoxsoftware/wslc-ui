@@ -1,11 +1,18 @@
 import { mkdirSync, rmSync } from 'node:fs'
-import type { CommandResult, ContainerAction, ContainerInfo, RunContainerOptions } from '@shared/schemas'
+import type {
+  CommandResult,
+  ContainerAction,
+  ContainerActionOptions,
+  ContainerInfo,
+  ExecOptions,
+  RunContainerOptions
+} from '@shared/schemas'
 import { logError, logInfo, logWarn } from '../../logger'
 import { splitCommand } from '../run-args'
 import { allocStreamId, registerStream, releaseStream, type StreamSink } from '../streams'
 import {
   decodeBytes,
-  hrHex,
+  hrText,
   hrOk,
   Keep,
   registerCallback,
@@ -94,12 +101,12 @@ function failResult(fnName: string, hr: number, message: string | null): Command
     ok: false,
     code: 1,
     stdout: '',
-    stderr: message || `${fnName} falhou: ${hrHex(hr)}`
+    stderr: message || `${fnName} falhou: ${hrText(hr)}`
   }
 }
 
 function check(fnName: string, hr: number): void {
-  if (!hrOk(hr)) throw new Error(`${fnName} falhou: ${hrHex(hr)}`)
+  if (!hrOk(hr)) throw new Error(`${fnName} falhou: ${hrText(hr)}`)
 }
 
 function appendLog(c: NativeContainer, chunk: string): void {
@@ -443,11 +450,20 @@ export async function listNativeContainers(all: boolean): Promise<ContainerInfo[
 }
 
 /** start / stop / restart / remove sobre o handle nativo. */
-export async function nativeContainerAction(action: ContainerAction, id: string): Promise<CommandResult> {
+export async function nativeContainerAction(
+  action: ContainerAction,
+  id: string,
+  opts?: ContainerActionOptions
+): Promise<CommandResult> {
   const c = find(id)
   if (!c) return notFound(id)
   const raw = c.sdk.raw
   logInfo('native', `Ação "${action}" no container ${c.id.slice(0, 12)} (${c.name})`)
+
+  // WslcStopContainer recebe sinal e espera, então o -s/-t da CLI vale aqui
+  // também. O remove é que não tem escolha: o SDK só deleta com força.
+  const sinal = opts?.signal?.trim() ? resolveNativeSignal(opts.signal) : SIGTERM
+  const espera = opts?.timeout ?? STOP_TIMEOUT_S
 
   const start = async (): Promise<CommandResult> => {
     c.exitCode = null
@@ -458,8 +474,16 @@ export async function nativeContainerAction(action: ContainerAction, id: string)
       : failResult('WslcStartContainer', hr, err[0])
   }
   const stop = async (): Promise<CommandResult> => {
+    if (sinal === undefined) {
+      return {
+        ok: false,
+        code: 1,
+        stdout: '',
+        stderr: `Sinal "${opts?.signal}" não suportado pelo SDK nativo (${SINAIS_ACEITOS}).`
+      }
+    }
     const err: (string | null)[] = [null]
-    const hr = await callNative(raw['WslcStopContainer'], c.handle, SIGTERM, STOP_TIMEOUT_S, err)
+    const hr = await callNative(raw['WslcStopContainer'], c.handle, sinal, espera, err)
     return hrOk(hr)
       ? { ok: true, code: 0, stdout: '', stderr: '' }
       : failResult('WslcStopContainer', hr, err[0])
@@ -500,24 +524,36 @@ const NATIVE_SIGNALS: Record<string, number> = {
 }
 
 /**
+ * Nome do sinal → número, aceitando também o número cru e a forma sem o
+ * prefixo ("TERM"). `undefined` quando o SDK não conhece o sinal — quem
+ * chama devolve a lista dos aceitos em vez de deixar o SDK dar E_INVALIDARG.
+ */
+function resolveNativeSignal(signal: string): number | undefined {
+  const name = signal.trim().toUpperCase()
+  if (/^\d+$/.test(name)) return Number(name)
+  return NATIVE_SIGNALS[name.startsWith('SIG') ? name : `SIG${name}`]
+}
+
+const SINAIS_ACEITOS = `aceitos: ${Object.keys(NATIVE_SIGNALS).join(', ')} ou número`
+
+/**
  * Kill nativo: WslcStopContainer com timeout 0 (sinal imediato, sem espera
  * graciosa). Sem sinal = SIGKILL, como o `container kill` da CLI.
  */
 export async function killNativeContainer(id: string, signal?: string): Promise<CommandResult> {
   const c = find(id)
   if (!c) return notFound(id)
-  const name = (signal?.trim() || 'SIGKILL').toUpperCase()
-  const normalized = name.startsWith('SIG') ? name : `SIG${name}`
-  const value = /^\d+$/.test(name) ? Number(name) : NATIVE_SIGNALS[normalized]
+  const pedido = signal?.trim() || 'SIGKILL'
+  const value = resolveNativeSignal(pedido)
   if (value === undefined) {
     return {
       ok: false,
       code: 1,
       stdout: '',
-      stderr: `Sinal "${signal}" não suportado pelo SDK nativo (aceitos: ${Object.keys(NATIVE_SIGNALS).join(', ')} ou número).`
+      stderr: `Sinal "${signal}" não suportado pelo SDK nativo (${SINAIS_ACEITOS}).`
     }
   }
-  logInfo('native', `Kill (${normalized}) no container ${c.id.slice(0, 12)} (${c.name})`)
+  logInfo('native', `Kill (${pedido}) no container ${c.id.slice(0, 12)} (${c.name})`)
   const err: (string | null)[] = [null]
   const hr = await callNative(c.sdk.raw['WslcStopContainer'], c.handle, value, 0, err)
   return hrOk(hr)
@@ -541,8 +577,17 @@ export async function pruneNativeContainers(): Promise<CommandResult> {
   return { ok: true, code: 0, stdout: `${removed} container(s) removido(s)`, stderr: '' }
 }
 
-/** Executa um comando one-shot no container (WslcCreateContainerProcess + callbacks). */
-export async function execNativeContainer(id: string, command: string): Promise<CommandResult> {
+/**
+ * Executa um comando one-shot no container (WslcCreateContainerProcess +
+ * callbacks). Das opções do `wslc exec`, o SDK tem diretório de trabalho e
+ * variáveis; usuário, env-file e desanexado não têm equivalente — a UI as
+ * esconde no motor nativo em vez de aceitá-las e ignorar.
+ */
+export async function execNativeContainer(
+  id: string,
+  command: string,
+  opts?: ExecOptions
+): Promise<CommandResult> {
   const c = find(id)
   if (!c) return notFound(id)
   const { sdk } = c
@@ -563,6 +608,19 @@ export async function execNativeContainer(id: string, command: string): Promise<
       'WslcSetProcessSettingsCmdLine',
       sdk.raw['WslcSetProcessSettingsCmdLine'](ps, keep.strArray(argv), argv.length)
     )
+    const env = (opts?.env ?? []).filter((e) => e.trim())
+    if (env.length > 0) {
+      check(
+        'WslcSetProcessSettingsEnvVariables',
+        sdk.raw['WslcSetProcessSettingsEnvVariables'](ps, keep.strArray(env), env.length)
+      )
+    }
+    if (opts?.workdir?.trim()) {
+      check(
+        'WslcSetProcessSettingsWorkingDirectory',
+        sdk.raw['WslcSetProcessSettingsWorkingDirectory'](ps, keep.ansi(opts.workdir.trim()))
+      )
+    }
     const onIo = registerCallback((io: number, data: unknown, bytes: number) => {
       const chunk = decodeBytes(data, bytes).toString('utf8')
       if (!chunk) return

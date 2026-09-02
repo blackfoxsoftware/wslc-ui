@@ -76,12 +76,34 @@ export const createNetworkOptionsSchema = z.object({
   /** CIDR, ex.: 172.20.0.0/16 */
   subnet: z.string().optional(),
   gateway: z.string().optional(),
+  /** --ip-range: sub-faixa da subnet de onde saem os IPs dos containers */
+  ipRange: z.string().optional(),
   /** --internal: sem acesso externo */
   internal: z.boolean().optional(),
   /** pares chave=valor (-l) */
   labels: z.array(z.string()).optional(),
   /** opções do driver (-o chave=valor) */
   options: z.array(z.string()).optional()
+})
+
+/**
+ * `wslc network connect`. As cinco opções chegaram na 2.9.8 (PR #41070) —
+ * antes disso o comando só aceitava rede e container, e a regra 18 do
+ * ROADMAP registrava justamente essa ausência.
+ */
+export const connectNetworkOptionsSchema = z.object({
+  network: z.string().min(1),
+  container: z.string().min(1),
+  /** --network-alias: outros nomes pelos quais o container responde na rede */
+  aliases: z.array(z.string()).optional(),
+  /** --ip: IPv4 fixo dentro da rede */
+  ip: z.string().optional(),
+  /** --link: nome:alias de outro container */
+  links: z.array(z.string()).optional(),
+  /** --link-local-ip */
+  linkLocalIps: z.array(z.string()).optional(),
+  /** --driver-opt: pares chave=valor do driver de endpoint */
+  driverOpts: z.array(z.string()).optional()
 })
 
 /** Uma linha do `wslc system session list` (id e PID são numéricos na tabela). */
@@ -104,6 +126,90 @@ export const nativeTuningSchema = z.object({
 })
 
 export const containerActionSchema = z.enum(['start', 'stop', 'restart', 'remove'])
+
+/**
+ * Opções das ações de container. `stop` aceita sinal e espera; `remove`
+ * aceita forçar (mesmo em execução) e levar os volumes anônimos.
+ *
+ * O motor nativo honra sinal/espera no stop (WslcStopContainer recebe os
+ * dois) e SEMPRE remove com força — a opção só muda o comportamento da CLI.
+ */
+export const containerActionOptionsSchema = z.object({
+  /** remove: -f, remove mesmo com o container em execução */
+  force: z.boolean().optional(),
+  /** remove: -v, remove também os volumes anônimos do container */
+  volumes: z.boolean().optional(),
+  /** stop/restart: -s <sinal> (padrão: o STOPSIGNAL do container, senão SIGTERM) */
+  signal: z.string().optional(),
+  /** stop/restart: -t <segundos> antes do SIGKILL (padrão da CLI: 5) */
+  timeout: z.number().int().nonnegative().optional()
+})
+
+/** Direção do `wslc container cp` — o comando é o mesmo, muda quem é ORIGEM. */
+export const copyDirectionSchema = z.enum(['to-container', 'from-container'])
+
+/**
+ * `wslc container cp` (recurso só da CLI: o SDK não tem API de cópia).
+ *
+ * A CLI recebe dois caminhos posicionais e descobre a direção pelo prefixo
+ * `CONTAINER:`; aqui a direção é explícita para o diálogo não ter que montar
+ * string, e quem monta os argumentos é `buildCopyArgs`.
+ */
+export const containerCopyOptionsSchema = z.object({
+  container: z.string().min(1),
+  direction: copyDirectionSchema,
+  /** Caminho no Windows (arquivo ou pasta). */
+  hostPath: z.string().min(1),
+  /** Caminho dentro do container. */
+  containerPath: z.string().min(1),
+  /** -a: modo arquivo, preserva dono e permissões. */
+  archive: z.boolean().optional()
+})
+
+/**
+ * Opções do `wslc exec`. O motor nativo honra `env` e `workdir`
+ * (WslcSetProcessSettingsEnvVariables/WorkingDirectory); usuário, env-file e
+ * desanexado são só da CLI.
+ */
+export const execOptionsSchema = z.object({
+  /** -u: name | uid | uid:gid */
+  user: z.string().optional(),
+  /** -w: diretório de trabalho do processo */
+  workdir: z.string().optional(),
+  /** -e: pares KEY=VALUE */
+  env: z.array(z.string()).optional(),
+  /** --env-file: arquivo com um KEY=valor por linha */
+  envFile: z.string().optional(),
+  /** -d: não espera o processo terminar (nenhuma saída volta) */
+  detach: z.boolean().optional()
+})
+
+/**
+ * Opções do `wslc container logs`. Sem `tail` a CLI despeja o log inteiro
+ * desde o primeiro byte — por isso a UI abre com uma cauda por padrão.
+ * Recurso da CLI: no motor nativo o log chega por callback, sem como pedir
+ * cauda ou recorte por data.
+ */
+export const containerLogsOptionsSchema = z.object({
+  /** -f: continua acompanhando depois de despejar o que já existe */
+  follow: z.boolean().optional(),
+  /** -n: só as últimas N linhas */
+  tail: z.number().int().positive().optional(),
+  /** -t: prefixa cada linha com data e hora */
+  timestamps: z.boolean().optional(),
+  /** --since: segundos unix ou RFC3339 (ex.: 2026-09-01T10:30:00Z) */
+  since: z.string().optional(),
+  /** --until: segundos unix ou RFC3339 */
+  until: z.string().optional()
+})
+
+/** Opções do `wslc image rm`. */
+export const removeImageOptionsSchema = z.object({
+  /** -f: remove mesmo que algum container use a imagem */
+  force: z.boolean().optional(),
+  /** --no-prune: mantém as camadas pai sem tag */
+  noPrune: z.boolean().optional()
+})
 
 /** Healthcheck do `wslc run` (--health-*; só no motor CLI). */
 export const runHealthOptionsSchema = z.object({
@@ -142,6 +248,17 @@ export const runContainerOptionsSchema = z.object({
   // --- só no motor CLI (o SDK preview não tem equivalentes) ---
   network: z.string().optional(),
   networkAliases: z.array(z.string()).optional(),
+  /** --ip: IPv4 fixo na rede escolhida */
+  ip: z.string().optional(),
+  /** --mount: especificação completa, ex.: type=bind,source=C:\d,target=/d,readonly */
+  mounts: z.array(z.string()).optional(),
+  /** --pull: quando consultar o registry antes de subir */
+  pull: z.enum(['always', 'missing', 'never']).optional(),
+  /**
+   * `container create` em vez de `run`: cria o container parado. É o fluxo do
+   * docker para preparar antes de iniciar — diferente de `run -d`, que já sobe.
+   */
+  createOnly: z.boolean().optional(),
   /** -P: publica todas as portas expostas em portas aleatórias */
   publishAll: z.boolean().optional(),
   user: z.string().optional(),
@@ -311,13 +428,37 @@ export const registryImageSchema = z.object({
   official: z.boolean()
 })
 
+/**
+ * `wslc image build`. Recurso do motor CLI: o SDK nativo não constrói imagem.
+ *
+ * A 2.9.8 trocou o motor por `docker buildx build` (PR #41133) — é de lá que
+ * vêm `--secret` e a especificação do `--output`.
+ */
 export const buildImageOptionsSchema = z.object({
   /** nome:tag da imagem resultante */
   tag: z.string().min(1),
   /** pasta de contexto do build (contém o Containerfile) */
   context: z.string().min(1),
   /** caminho do Containerfile/Dockerfile, se não for o padrão */
-  file: z.string().optional()
+  file: z.string().optional(),
+  /** --build-arg: pares CHAVE=VALOR disponíveis durante o build */
+  buildArgs: z.array(z.string()).optional(),
+  /** --no-cache: ignora as camadas em cache */
+  noCache: z.boolean().optional(),
+  /** --target: para em um estágio do Containerfile multi-stage */
+  target: z.string().optional(),
+  /** --secret: id=NAME[,type=env|file][,env=VAR|,src=PATH] */
+  secrets: z.array(z.string()).optional(),
+  /** -o/--output: destino no formato do docker buildx (type=local,dest=…) */
+  output: z.string().optional(),
+  /** --progress: formato da saída de progresso */
+  progress: z.enum(['auto', 'tty', 'plain', 'quiet']).optional(),
+  /** --iidfile: grava o ID da imagem construída neste arquivo */
+  iidfile: z.string().optional(),
+  /** -l: pares chave=valor de metadados na imagem */
+  labels: z.array(z.string()).optional(),
+  /** --pull: sempre busca a imagem base mais nova antes de construir */
+  pull: z.boolean().optional()
 })
 
 export const windowStateEventSchema = z.object({
@@ -408,12 +549,19 @@ export type ImageInfo = z.infer<typeof imageSchema>
 export type VolumeInfo = z.infer<typeof volumeSchema>
 export type NetworkInfo = z.infer<typeof networkSchema>
 export type CreateNetworkOptions = z.infer<typeof createNetworkOptionsSchema>
+export type ConnectNetworkOptions = z.infer<typeof connectNetworkOptionsSchema>
 export type WslcSessionInfo = z.infer<typeof wslcSessionSchema>
 export type NativeTuning = z.infer<typeof nativeTuningSchema>
 export type RunHealthOptions = z.infer<typeof runHealthOptionsSchema>
 export type VhdVolumeOptions = z.infer<typeof vhdVolumeOptionsSchema>
 export type CommandResult = z.infer<typeof commandResultSchema>
 export type ContainerAction = z.infer<typeof containerActionSchema>
+export type ContainerActionOptions = z.infer<typeof containerActionOptionsSchema>
+export type CopyDirection = z.infer<typeof copyDirectionSchema>
+export type ContainerCopyOptions = z.infer<typeof containerCopyOptionsSchema>
+export type ExecOptions = z.infer<typeof execOptionsSchema>
+export type ContainerLogsOptions = z.infer<typeof containerLogsOptionsSchema>
+export type RemoveImageOptions = z.infer<typeof removeImageOptionsSchema>
 export type RunContainerOptions = z.infer<typeof runContainerOptionsSchema>
 export type StreamDataEvent = z.infer<typeof streamDataEventSchema>
 export type StreamExitEvent = z.infer<typeof streamExitEventSchema>

@@ -31,7 +31,8 @@ const CATEGORY_LABEL: Record<LogCategory, string> = {
   native: 'Nativo',
   engine: 'Motor',
   stream: 'Streams',
-  terminal: 'Terminal'
+  terminal: 'Terminal',
+  update: 'Atualização'
 }
 
 const LEVEL_OPTIONS = (Object.keys(LEVEL_LABEL) as LogLevel[]).map((l) => ({

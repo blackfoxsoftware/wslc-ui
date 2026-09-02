@@ -1,6 +1,6 @@
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { _electron as electron } from '@playwright/test'
 import type { WslcApi } from '../src/shared/ipc/api'
 
@@ -14,7 +14,8 @@ import type { WslcApi } from '../src/shared/ipc/api'
  * quebra sozinha, sem quebrar nada no E2E.
  *
  * Então este script abre o .exe de verdade e confere justamente isso: que a
- * DLL veio de dentro do pacote e que a chamada CHEGOU nela.
+ * DLL veio de dentro do pacote, que a chamada CHEGOU nela, e que o app sabe
+ * onde procurar atualização.
  *
  * O que ele NÃO afirma é que o motor nativo funciona — isso depende de haver
  * WSL na máquina, e runner de CI não tem. Quem mede aquilo são os testes de
@@ -53,6 +54,20 @@ try {
   else if (!/resources/i.test(status.dllPath)) problemas.push(`DLL fora de resources/: ${status.dllPath}`)
   if (status.source !== 'bundled') problemas.push(`DLL veio de "${status.source}", não do pacote`)
 
+  // O auto-updater depende de um arquivo que só existe no pacote: sem o
+  // app-update.yml em resources/, o app abre normalmente e nunca descobre que
+  // saiu versão nova — falha silenciosa, visível só uma release depois.
+  if (!existsSync(join(dirname(exe), 'resources', 'app-update.yml'))) {
+    problemas.push('resources/app-update.yml não foi embutido: o auto-updater não teria onde procurar')
+  }
+
+  const update = await page.evaluate(() =>
+    (globalThis as unknown as { wslcApi: WslcApi }).wslcApi.updateStatus()
+  )
+  if (update.mode !== 'installer') {
+    problemas.push(`o updater se vê como "${update.mode}", e este build é o instalado`)
+  }
+
   // Um HRESULT na mensagem prova que a chamada CHEGOU na DLL — ou seja, o koffi
   // carregou de fora do asar e os bindings casaram. Sem WSL a chamada falha
   // (0x80070032, ERROR_NOT_SUPPORTED), e tudo bem; o que não pode é falhar
@@ -70,7 +85,7 @@ try {
     process.exitCode = 1
   } else {
     console.log(
-      `\nOK: app empacotado abriu e alcançou a DLL em resources/.` +
+      `\nOK: app empacotado abriu, alcançou a DLL em resources/ e sabe onde procurar atualização.` +
         (status.available
           ? ` Motor nativo disponível, ABI ${status.abi}.`
           : ` Motor nativo não exercitável aqui: ${status.detail}`)

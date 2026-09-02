@@ -12,6 +12,7 @@ import { useLogsStore } from '@/features/logs/store'
 import { useEngineStore } from '@/stores/engine-store'
 import { useEnvStore } from '@/stores/env-store'
 import { initStreamSubscriptions } from '@/stores/stream-store'
+import { initUpdateSubscription } from '@/stores/update-store'
 
 const SESSION_END_REASONS: Record<NativeSessionEndedEvent['reason'], string> = {
   shutdown: 'o WSL foi desligado',
@@ -29,6 +30,9 @@ export default function AppShell(): React.JSX.Element {
   }, [refreshEnv])
 
   useEffect(() => initStreamSubscriptions(), [])
+
+  // Auto-updater: o main empurra cada transição; o aviso sai do store.
+  useEffect(() => initUpdateSubscription(), [])
 
   // Entradas de log ao vivo do processo main → store da view Logs.
   useEffect(() => window.wslcApi.onLogEntry((entry) => useLogsStore.getState().append(entry)), [])

@@ -1,8 +1,21 @@
 import { vi } from 'vitest'
 import type { WslcApi } from '@shared/ipc/api'
-import type { CommandResult, Engine, WslcEnvironment } from '@shared/schemas'
+import type { CommandResult, Engine, UpdateStatus, WslcEnvironment } from '@shared/schemas'
 
 const okResult = (): CommandResult => ({ ok: true, code: 0, stdout: '', stderr: '' })
+
+const idleUpdate = (): UpdateStatus => ({
+  mode: 'installer',
+  state: 'idle',
+  currentVersion: '0.0.0-test',
+  newVersion: null,
+  percent: null,
+  releaseNotes: null,
+  releaseUrl: null,
+  checkedAt: null,
+  error: null,
+  reason: null
+})
 
 const readyEnv: WslcEnvironment = {
   wslInstalled: true,
@@ -91,6 +104,10 @@ export function installWslcApiMock(overrides: Partial<WslcApi> = {}): WslcApi {
     pickFile: vi.fn(async () => null),
     pickSaveFile: vi.fn(async () => null),
     openExternal: vi.fn(async () => undefined),
+    updateStatus: vi.fn(async () => idleUpdate()),
+    checkForUpdates: vi.fn(async () => idleUpdate()),
+    installUpdate: vi.fn(async () => undefined),
+    onUpdateStatus: vi.fn(() => () => {}),
     streamLogs: vi.fn(async () => 1),
     pullImage: vi.fn(async () => 1),
     stopStream: vi.fn(async () => undefined),

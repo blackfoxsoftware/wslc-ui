@@ -1,6 +1,26 @@
 {
   "versoes": [
     {
+      "versao": "0.3.0",
+      "data": "2026-09-02",
+      "titulo": "O app passa a se atualizar sozinho a partir das releases.",
+      "mudancas": {
+        "adicionado": [
+          "Atualização automática pelas releases deste repositório: o app instalado checa ao abrir e a cada 6 horas, baixa em segundo plano e aplica a versão nova quando você fecha o app.",
+          "Seção \"Atualizações\" na aba Sistema: versão instalada, última checagem, progresso do download, as notas da versão nova e os botões de procurar e de instalar na hora.",
+          "A versão portátil também avisa quando sai versão nova — e leva para a release, já que trocar o .exe é de quem usa.",
+          "Categoria \"Atualização\" no painel de logs: tudo o que o updater faz fica registrado, inclusive quando falha."
+        ],
+        "alterado": [
+          "O encerramento do app virou um caminho único e compartilhado: fechar a janela e instalar uma atualização passam pelo mesmo desligamento ordenado, que solta a sessão nativa antes de sair.",
+          "Só versões estáveis contam como atualização. Pré-lançamentos (0.4.0-rc.1) continuam publicados, para quem quiser baixar à mão."
+        ],
+        "corrigido": [
+          "O empacotamento passou a gerar e publicar o latest.yml, sem o qual uma release fica visível para quem baixa à mão e invisível para quem já tem o app instalado. O job de empacotamento agora falha se o arquivo não existir."
+        ]
+      }
+    },
+    {
       "versao": "0.2.0",
       "data": "2026-09-01",
       "titulo": "O app agora tem instalador, e leva o SDK do WSL consigo.",

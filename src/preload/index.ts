@@ -85,6 +85,10 @@ const api: WslcApi = {
   pickSaveFile: (title, defaultName, extensions) =>
     invoke('system:pick-save', { title, defaultName, extensions }),
   openExternal: (url) => invoke('system:open-external', { url }),
+  updateStatus: () => invoke('updates:status', undefined),
+  checkForUpdates: () => invoke('updates:check', undefined),
+  installUpdate: () => invoke('updates:install', undefined),
+  onUpdateStatus: (cb) => subscribe('updates:status', cb),
   streamLogs: (id) => invoke('containers:logs', { id }),
   pullImage: (ref) => invoke('images:pull', { ref }),
   stopStream: (streamId) => invoke('streams:stop', { streamId }),

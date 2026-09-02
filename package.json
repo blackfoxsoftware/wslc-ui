@@ -1,6 +1,6 @@
 {
   "name": "wslc-ui",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "UI desktop para WSL Containers (wslc) — Electron + Vite",
   "license": "MIT",
@@ -25,11 +25,12 @@
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:headed": "npm run build && playwright test --headed",
-    "dist": "npm run build && electron-builder --win --config electron-builder.yml",
-    "dist:dir": "npm run build && electron-builder --win --dir --config electron-builder.yml",
+    "dist": "npm run build && electron-builder --win --publish never --config electron-builder.yml",
+    "dist:dir": "npm run build && electron-builder --win --dir --publish never --config electron-builder.yml",
     "cenario:nativo": "esbuild scripts/cenario-nativo.ts --bundle --platform=node --format=esm --packages=external --outfile=node_modules/.cache/cenario-nativo.mjs --log-level=warning && node node_modules/.cache/cenario-nativo.mjs"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "koffi": "^3.1.6",
     "zod": "^4.4.3"
   },

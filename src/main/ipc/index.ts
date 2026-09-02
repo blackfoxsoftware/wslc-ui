@@ -6,6 +6,7 @@ import { currentEngine, getEngineStatus, setEngine } from '../services/wslc/engi
 import { ops } from '../services/wslc/ops'
 import { stopStream } from '../services/wslc/streams'
 import { closeTerminal, writeTerminal } from '../services/wslc/terminals'
+import { shutdownWslc } from '../shutdown'
 import { rendererStreamSink, rendererTerminalSink, sendEvent } from './events'
 import { registerInvokeHandlers } from './router'
 
@@ -15,7 +16,7 @@ export function registerIpc(): void {
   const service = resolveWslcService()
   // Fronteiras do processo (FFI nativa, streams da CLI e efeitos externos):
   // reais em produção, dubladas sob WSLC_UI_MOCK. Ver services/wslc/ops.ts.
-  const { native, stream, host } = ops()
+  const { native, stream, host, update } = ops()
 
   // Tuning persistido da sessão nativa → aplicado quando a sessão for criada.
   native.setTuning(readNativeTuning(settingsFile()))
@@ -38,6 +39,15 @@ export function registerIpc(): void {
       sendEvent(win.webContents, 'native:crash-dump', ev)
     }
   })
+
+  // Auto-updater: cada transição (checou, achou, baixou, falhou) vira evento.
+  // Sem isso a UI teria que ficar perguntando — e um download leva minutos.
+  update.setOnChange((status) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      sendEvent(win.webContents, 'updates:status', status)
+    }
+  })
+  update.start()
 
   // Cada entrada de log vira um evento ao vivo para a view Logs.
   setOnLogEntry((entry) => {
@@ -191,6 +201,16 @@ export function registerIpc(): void {
       writeSdkPath(settingsFile(), path)
       native.setSdkPath(path)
     },
+    'updates:status': () => update.status(),
+    'updates:check': () => update.check(),
+    // Encerra a sessão nativa ANTES de entregar o app ao instalador: o NSIS
+    // fecha o processo se ele demorar, e um processo morto assim deixa a
+    // sessão "WslcUi" órfã no WSL.
+    'updates:install': async () => {
+      await shutdownWslc()
+      update.install()
+    },
+
     'system:native-status': () => native.status(),
     'system:get-engine': () => getEngineStatus(),
     'system:set-engine': ({ engine }) => setEngine(engine),

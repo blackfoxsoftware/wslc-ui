@@ -63,5 +63,11 @@ nsis:
 portable:
   artifactName: ${name}-${version}-portable.${ext}
 
-# Não publica sozinho: quem cria a release é o workflow, a partir da tag.
-publish: null
+# O provedor NÃO é para publicar daqui (o `dist` roda com --publish never;
+# quem cria a release é o workflow). Ele existe por dois efeitos colaterais
+# obrigatórios: gerar o `latest.yml`, que é o índice que o auto-updater lê, e
+# embutir o `app-update.yml` no pacote, que é como o app sabe onde procurar.
+publish:
+  provider: github
+  owner: blackfoxsoftware
+  repo: wslc-ui

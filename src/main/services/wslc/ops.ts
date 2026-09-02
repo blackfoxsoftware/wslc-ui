@@ -12,6 +12,7 @@ import type {
   RegistryImage,
   RunContainerOptions,
   SdkProbe,
+  UpdateStatus,
   VhdVolumeOptions,
   VolumeInfo
 } from '@shared/schemas'
@@ -23,10 +24,11 @@ import type { TerminalSink } from './terminals'
 /**
  * Fronteiras injetáveis do processo main.
  *
- * O app já trocava a CLI por um dublê (`WslcService` / `mock.ts`), mas três
- * superfícies continuavam presas ao mundo real: o motor NATIVO (FFI na
- * wslcsdk.dll), os STREAMS da CLI (spawn do wslc.exe) e os EFEITOS externos
- * (diálogos do Electron, shell do Windows, busca no Docker Hub).
+ * O app já trocava a CLI por um dublê (`WslcService` / `mock.ts`), mas o resto
+ * continuava preso ao mundo real: o motor NATIVO (FFI na wslcsdk.dll), os
+ * STREAMS da CLI (spawn do wslc.exe), os EFEITOS externos (diálogos do
+ * Electron, shell do Windows, busca no Docker Hub) e o AUTO-UPDATER (GitHub
+ * Releases, e o fechamento do app para aplicar a versão nova).
  *
  * Isso deixava metade do app fora de alcance de teste — inclusive o motor
  * nativo inteiro. Aqui elas viram interface, com implementação real
@@ -117,10 +119,25 @@ export interface HostOps {
   searchRegistry(query: string): Promise<RegistryImage[]>
 }
 
+/** Auto-updater: rede, disco e o fechamento do app para aplicar a versão nova. */
+export interface UpdateOps {
+  /** Estado atual. Não fala com a rede. */
+  status(): UpdateStatus
+  /** Procura atualização agora; resolve com o estado depois da checagem. */
+  check(): Promise<UpdateStatus>
+  /** Aplica a atualização já baixada (fecha o app). */
+  install(): void
+  /** Cada transição de estado — a UI acompanha sem ficar perguntando. */
+  setOnChange(cb: (status: UpdateStatus) => void): void
+  /** Liga a checagem automática (na abertura e periódica). */
+  start(): void
+}
+
 export interface Ops {
   native: NativeOps
   stream: StreamOps
   host: HostOps
+  update: UpdateOps
 }
 
 /** WSLC_UI_MOCK=1 (demo) ou =setup (ambiente incompleto) usam os dublês. */

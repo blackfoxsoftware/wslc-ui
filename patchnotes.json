@@ -18,7 +18,8 @@
           "O app ficou ~100 MB menor: tudo o que só o renderer usa saiu de dependencies, onde viajava duas vezes (embutido no bundle e de novo em node_modules)."
         ],
         "corrigido": [
-          "Login em registry e instalação guiada não corrompem mais a chamada quando a DLL é 2.9.9: as duas funções mudaram de assinatura sem mudar o header de forma detectável, e o app agora identifica a ABI e se adapta."
+          "Login em registry e instalação guiada não corrompem mais a chamada quando a DLL é 2.9.9: as duas funções mudaram de assinatura sem mudar o header de forma detectável, e o app agora identifica a ABI e se adapta.",
+          "O teste de fumaça do app empacotado passou a separar o que é falha de empacotamento do que é ausência de WSL na máquina — antes ele exigia um motor nativo funcionando, que nenhum runner de CI tem."
         ]
       }
     },

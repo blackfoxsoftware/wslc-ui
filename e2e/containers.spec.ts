@@ -9,6 +9,7 @@ import {
   expectAlert,
   expectToast,
   fillField,
+  fillNumber,
   menuAction,
   modal,
   row,
@@ -234,7 +235,7 @@ test.describe('Containers · diferenças entre os motores', () => {
 
       await menuAction(page, 'Mais ações do container', 'Logs com opções', row(page, 'web'))
       const dialog = modal(page)
-      await fillField(dialog, 'Últimas linhas', '20')
+      await fillNumber(dialog, 'Últimas linhas', '20')
       await toggleSwitch(dialog, 'Mostrar carimbo de hora')
       await dialog.getByRole('button', { name: 'Ver logs' }).click()
 

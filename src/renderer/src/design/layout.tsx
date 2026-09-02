@@ -27,11 +27,16 @@ export function PageShell({
   className,
   fill
 }: PageShellProps & { fill?: boolean }): React.JSX.Element {
+  // `vt-page` marca a região que troca quando se muda de tela (design/motion.css).
+  // Como o cabeçalho aqui dentro também é nomeado, ele sai deste snapshot e fica
+  // parado enquanto o corpo desliza — sem precisar de wrapper novo.
   if (fill) {
-    return <div className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>{children}</div>
+    return (
+      <div className={cn('vt-page flex min-h-0 flex-1 flex-col overflow-hidden', className)}>{children}</div>
+    )
   }
   return (
-    <div className={cn('min-h-0 flex-1 overflow-y-auto scrollbar', className)}>
+    <div className={cn('vt-page min-h-0 flex-1 overflow-y-auto scrollbar', className)}>
       <div className="flex min-h-full flex-col">{children}</div>
     </div>
   )
@@ -43,11 +48,26 @@ interface PageHeaderProps {
   meta?: React.ReactNode
   description?: string
   actions?: React.ReactNode
+  /**
+   * Fecha o cabeçalho sem a borda de baixo, para quem vem em seguida fechá-lo.
+   *
+   * É o caso de uma view em abas: a faixa de abas fica logo abaixo, com o
+   * hairline dela, e duas linhas a 36px de distância só somariam ruído. As
+   * abas NÃO podem morar aqui dentro — a variante `secondary` do HeroUI é
+   * escrita em `> .tabs__list-container`, e o container precisa ser filho
+   * direto do `<Tabs>`.
+   */
+  flush?: boolean
 }
 
-export function PageHeader({ title, meta, description, actions }: PageHeaderProps): React.JSX.Element {
+export function PageHeader({ title, meta, description, actions, flush }: PageHeaderProps): React.JSX.Element {
   return (
-    <header className="page-bar sticky top-0 z-20 flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-6 py-3.5">
+    <header
+      className={cn(
+        'vt-page-header page-bar sticky top-0 z-20 flex flex-wrap items-center gap-x-4 gap-y-3 px-6 py-3.5',
+        flush ? 'pb-2.5' : 'border-b border-border'
+      )}
+    >
       <div className="flex min-w-0 flex-col gap-1">
         <div className="flex items-center gap-2.5">
           <h1 className="font-display text-lg font-semibold tracking-tight">{title}</h1>

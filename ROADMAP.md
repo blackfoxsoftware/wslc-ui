@@ -245,6 +245,81 @@ a directory` (E_FAIL) se existir, ou seja, a CLI **não renomeia**;
     `WslcStopContainer` recebe sinal e espera, e o process settings tem
     `WorkingDirectory` e `EnvVariables`. O `-u` do exec não tem equivalente.
 
+22. **Componente do HeroUI tem contrato de ESTRUTURA, não só de props**
+    (02/09/2026, adotando abas e campos novos). A variante `secondary` das
+    abas é escrita em `.tabs--secondary > .tabs__list-container`: **filho
+    direto**. Aninhar o `Tabs.ListContainer` dentro do `<PageHeader>` fazia o
+    `variant="secondary"` não pegar em nada — a classe estava no lugar certo, e
+    ainda assim saía a variante primária (pílula + trilho pintado), sem nenhum
+    erro. Por isso `PageHeader` ganhou `flush` (fecha sem borda) em vez de um
+    slot de abas: a faixa fica FORA dele, irmã do cabeçalho. Vale também para
+    a composição interna: `NumberField.Group` espera
+    `Decrement → Input → Increment`, e com o campo primeiro o input colapsa e
+    o `+` vai para a outra ponta da linha. Quando um componente do HeroUI sai
+    errado sem erro no console, conferir a ÁRVORE antes das props — e ler o CSS
+    da variante em `node_modules/@heroui/styles/dist/components/`.
+
+23. **`step` do `NumberField` arredonda o valor confirmado** (02/09/2026,
+    medido: o campo de cauda dos logs gravava 1 em vez de 20). O passo do React
+    Aria não é só das setas — ele **snappa** o número no commit para o múltiplo
+    mais próximo a partir do `minValue`. Com `step={100}` e `minValue={1}`,
+    digitar 20 grava 1; com `step={512}`, digitar 2048 grava 2049. Nos campos
+    em MB o passo cômodo de clicar não vale alterar o que a pessoa escreveu:
+    **nenhum campo do app passa `step`**. Dois vizinhos do mesmo componente:
+    `formatOptions={{ useGrouping: false }}` é obrigatório (em pt-BR o
+    formatador escreve 2048 como "2.048", que num campo técnico lê como dois e
+    pouco), e vazio é `NaN` no React Aria — a conversão para `undefined` mora
+    no `NumberInput`, para nenhuma tela precisar saber.
+
+24. **Atributo JSX não processa escape: `\\` são DUAS barras na tela**
+    (02/09/2026, visto num screenshot). `placeholder="C:\\Users\\eu"` não é uma
+    string de JavaScript — é texto de atributo, e o app mostrava
+    `C:\\Users\\eu`. Cinco placeholders e dicas de caminho do Windows estavam
+    assim. Barra simples em atributo; a duplicação só é necessária dentro de
+    `{'...'}`. E o corolário de teste: **`fill` do Playwright não serve para
+    `NumberField`** — ele grava o `value` do DOM direto, o React Aria continua
+    com o texto antigo em estado próprio e, no Enter, cai no `minValue`. Campo
+    numérico se preenche digitando (`pressSequentially`), e campo de lista
+    (`TagsInput`) só confirma com Enter: por isso `fixtures/ui.ts` tem
+    `fillNumber`, `fillTags` e `clearField` em vez de só `fillField`.
+
+25. **`view-transition-name` repetido DESCARTA a transição inteira, calado**
+    (02/09/2026, ao levar as abas para o design system). Dois elementos vivos
+    com o mesmo nome e o Chrome pula a transição toda — sem erro na tela, sem
+    erro no console; o sintoma é só "parou de animar". O caso real do app: um
+    diálogo com abas (run, build) abre EM CIMA de uma view com abas (Imagens), e
+    os dois painéis coexistem. Por isso o nome do painel é único por instância
+    (`viewTransitionName(useId())`, saneado — `«r0»` não é custom-ident válido) e
+    quem carrega a animação é `view-transition-class`, não o nome. O jeito de
+    testar isso sem olhar pixel: **transição descartada rejeita `ready`**, então
+    `e2e/transicoes.spec.ts` afirma o veredito da promessa.
+
+26. **`animation: none` num `::view-transition-group` mata o morph automático**
+    (02/09/2026). Para mexer só no tempo, mexer só em `animation-duration` e
+    `animation-timing-function` — zerar o `animation` inteiro tira a
+    interpolação de caixa que o UA faz sozinho (é ela que acomoda o cabeçalho
+    entre uma view com descrição e uma sem). E em `::view-transition-old`,
+    `animation: none` NÃO esconde o snapshot antigo: sem animação ele fica em
+    opacity 1 até a transição toda acabar, e o conteúdo velho reaparece pelos
+    buracos do novo — quem não participa leva `animation: none` **com**
+    `opacity: 0`. Corolário do tempo: saída mais curta que a entrada exige
+    `animation-fill-mode: forwards`, ou no fim da saída o antigo volta a
+    opacity 1 e pisca.
+
+27. **View transition é para região que troca de CONTEÚDO; layout é transição de
+    CSS** (02/09/2026, medido nos dois). Onde não existe elemento comum entre o
+    antes e o depois — a página numa troca de tela, o painel numa troca de aba —
+    só o snapshot resolve, porque não há como animar a saída de algo que o React
+    já desmontou. Onde o elemento CONTINUA lá e só muda de tamanho ou de lugar —
+    o rail recolhendo, o marcador do item ativo, um painel do rodapé crescendo —
+    o snapshot é pior: ele congela um layout e o UA o estica
+    (`inline-size: 100%; block-size: auto` é o padrão), então texto reflowado
+    aparece dobrado e rótulo flutua sem o corte do container. Um vizinho da
+    mesma família: o HeroUI **já usa** view transition na fila de toasts, sem
+    tipo nenhum (`@heroui/styles/.../toast.css`), então toda a coreografia do app
+    vive dentro de `:active-view-transition-type(...)` — o tipo é a fronteira
+    entre as duas.
+
 ## Fases
 
 1. **Sessão gerenciada** ✅ (concluída) — `native/session.ts`: singleton da
@@ -425,6 +500,71 @@ a directory` (E_FAIL) se existir, ou seja, a CLI **não renomeia**;
    função. "Mostrar parados" virou `IconToggle` (ícone + tooltip, estado no
    fundo de acento), composição nova em `design/controls.tsx` que a barra de
    logs também passou a usar.
+10. **Sistema em abas e controles certos para cada dado** ✅ (concluída,
+    02/09/2026). A view Sistema era uma página só com blocos heterogêneos numa
+    grade de duas colunas onde metade ocupava as duas — escada com buracos —, e
+    a escolha de motor (que decide o comportamento do app INTEIRO) ficava
+    abaixo da dobra como uma linha de `<dl>` no quarto bloco. Virou quatro
+    abas, cada uma respondendo a uma pergunta: **Ambiente** (o que está
+    instalado), **Motor** (quem executa e o que se perde trocando), **API
+    nativa** (qual DLL e com que limites de VM) e **Atualizações**. O painel
+    rola por dentro (`PageShell fill`), então a faixa de abas não sai da tela.
+    O maior ganho não foram as abas: o parágrafo de oito linhas que descrevia
+    em prosa a cobertura de cada motor virou **matriz de 14 linhas**
+    (`features/system/capabilities.ts`, tirada do roteamento real de
+    `ipc/index.ts`) — a pergunta "perco o quê?" passou a ser uma varredura de
+    olho, e ficou visível o que a prosa escondia (crash dump é o único recurso
+    só-nativo). A aba de Referências foi removida. Depois disso, **11
+    componentes do HeroUI que o app reimplementava à mão**, dos quais 5 já
+    entraram: `TagsInput` sobre `TagGroup` nos **14 campos** que eram texto
+    "separe por vírgula" (cada valor virou chip removível), `NumberInput` sobre
+    `NumberField` nos **11 campos** numéricos que eram `TextInput` +
+    `Number.parseInt`, `Meter` no lugar de `ProgressBar` em `Metric` (uso de
+    CPU é medição, não progresso rumo a uma conclusão), `InputGroup` nos 4
+    pares campo+botão montados com `flex items-end gap-2`, e
+    `ToggleButtonGroup` na escolha de motor (dois `ToggleButton` soltos são
+    duas chaves independentes para o leitor de tela; com `selectionMode`
+    "single" virou `radiogroup`). Ficam para depois: `Form`+`FieldError` (hoje
+    a validação só desabilita o botão, sem dizer por quê), `Disclosure` no
+    painel de logs, `Fieldset`/`SwitchGroup` no lugar da utility `field-group`,
+    `DateField` no recorte por data dos logs, `Toolbar` na barra de filtros e
+    `Link` na âncora crua do portão de instalação. Mínimo da janela subiu de
+    940×600 para **1180×700** (largura tirada do conteúdo real: rail de 224px +
+    tabela de containers ≈ 950px sem rolagem horizontal; altura parou em 700
+    porque tela de 768px menos barra de tarefas ainda é comum). Validação:
+    `npm run check` (383 testes) + E2E 181/181 e tour de screenshots no app
+    real por aba, diálogo e controle novo.
+
+11. **Movimento: view transitions onde a região troca de conteúdo** ✅
+    (concluída, 02/09/2026). Toda troca de estado visual era corte seco. Entrou
+    uma primitiva só (`lib/view-transition.ts`) e uma camada de coreografia
+    (`design/motion.css`), com a regra de leitura: **em toda troca, quase tudo é
+    fixo** — barra de título, rail, cabeçalho, faixa de abas e painéis do rodapé
+    ficam onde estão; o que muda é uma região. Então nada anima por padrão
+    (`::view-transition-old(root)` desligado) e a região que se move é nomeada
+    de propósito. O truque que dispensou refactor de estrutura: **elemento
+    nomeado é excluído do snapshot do ancestral nomeado** — nomear `PageShell`
+    (`page`) e `PageHeader` (`page-header`) já separou "o corpo" de "a barra",
+    sem wrapper novo em view nenhuma. O eixo do movimento é o **eixo do
+    navegador**: o rail é vertical, então trocar de tela desliza 8px em Y no
+    sentido do rail (`defaultViewTransition.types` em `main.tsx` →
+    `navTransitionTypes`, sobre a ordem de `navigation.ts`, agora fonte única);
+    a faixa de abas é horizontal, então trocar de aba desliza 10px em X
+    (wrapper `design/tabs.tsx` — as 4 telas com abas não mudaram uma linha).
+    Saída em 110ms contra entrada em 180ms, porque dois textos em cross-fade
+    pelo mesmo tempo ficam ilegíveis. **O que NÃO virou view transition, por
+    medição:** recolher o rail e abrir os painéis do rodapé. Ali a mudança é de
+    layout, e substituir o reflow por snapshot **dobra o texto** (grade de duas
+    colunas tem a segunda coluna em x diferente antes e depois, e o cross-fade
+    mostra as duas) e deixa rótulo flutuando sem o corte do container — o
+    `transition-[width]` que já existia interpola layout de verdade e não tem
+    nenhum dos dois artefatos. O marcador do item ativo do rail virou UM
+    elemento medido atrás da lista, que desliza por transição de CSS (medido:
+    y 48 → 164 aos 40% do caminho) e acompanha o layout **sem** transição
+    enquanto o rail fecha, senão fica correndo atrás de um alvo em movimento.
+    Validação: `npm run check` (404 testes) + E2E **187/187** com o movimento
+    LIGADO (nenhuma instabilidade, então a fixture não desliga animação) +
+    `e2e/transicoes.spec.ts`, que mede a fiação e não pixel.
 
 **Fase 10 — E2E do app inteiro (feita ✅)** — suíte Playwright (`e2e/`) contra o
 Electron compilado, cobrindo cada feature nos DOIS motores, com caminho feliz e

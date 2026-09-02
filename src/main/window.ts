@@ -7,8 +7,13 @@ export function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1240,
     height: 820,
-    minWidth: 940,
-    minHeight: 600,
+    // O piso sai do conteúdo mais largo do app, não de um número redondo: com
+    // o rail aberto (224px) uma tabela de containers precisa de ~950px para
+    // mostrar portas, CPU e memória sem rolagem horizontal. A altura para em
+    // 700 de propósito — 768px de tela menos a barra de tarefas ainda é comum,
+    // e um mínimo maior jogaria a janela para fora dela.
+    minWidth: 1180,
+    minHeight: 700,
     show: false,
     frame: false,
     autoHideMenuBar: true,
@@ -26,9 +31,9 @@ export function createMainWindow(): BrowserWindow {
   win.on('maximize', () => sendEvent(win.webContents, 'window:state', { maximized: true }))
   win.on('unmaximize', () => sendEvent(win.webContents, 'window:state', { maximized: false }))
 
-  // Link com target="_blank" (as referências em Sistema) abre no navegador
-  // padrão, nunca numa janela do app — pela mesma fronteira do IPC, para o
-  // modo demo poder apenas registrar em vez de abrir.
+  // Link com target="_blank" (o release do WSL no portão de instalação) abre no
+  // navegador padrão, nunca numa janela do app — pela mesma fronteira do IPC,
+  // para o modo demo poder apenas registrar em vez de abrir.
   win.webContents.setWindowOpenHandler((details) => {
     ops().host.openExternal(details.url)
     return { action: 'deny' }

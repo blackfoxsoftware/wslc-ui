@@ -1,0 +1,294 @@
+/*
+ * Movimento do wslc-ui.
+ *
+ * Terceira camada do design system — theme.css dá os tokens, glass.css dá o
+ * material e a forma, este arquivo diz o que se move quando o estado muda.
+ *
+ * ————————————————————————————————————————————————————————————————————————
+ * A regra que decide a ferramenta
+ *
+ * View transition serve para região que TROCA DE CONTEÚDO: a página inteira
+ * numa troca de tela, o painel numa troca de aba. Ali não existe elemento
+ * comum entre o antes e o depois, e sem snapshot não há como animar a saída de
+ * algo que o React já desmontou.
+ *
+ * Para mudança de LAYOUT — o rail recolhendo, um painel do rodapé crescendo — a
+ * ferramenta é transição de CSS no elemento de verdade. Foi medido: substituir
+ * o reflow por um snapshot DOBRA o texto (uma grade de duas colunas tem a
+ * segunda coluna em x diferente antes e depois, e o cross-fade mostra as duas)
+ * e deixa rótulo flutuando sem o corte do container. Layout de verdade
+ * interpola continuamente e não tem nenhum desses artefatos.
+ *
+ * Por isso aqui só existem dois tipos, `nav` e `tab`. O marcador do rail, que
+ * está sempre na tela e só muda de lugar, é transição de CSS (mais abaixo).
+ * ————————————————————————————————————————————————————————————————————————
+ *
+ * A ideia da parte de view transition em uma frase: EM TODA TROCA, QUASE TUDO É
+ * FIXO. Barra de título, rail, cabeçalho da página, faixa de abas e painéis do
+ * rodapé ficam exatamente onde estão; o que muda é uma região. Então nada anima
+ * por padrão: a região que se move é nomeada de propósito, e o cross-fade
+ * automático da página inteira (`root`) fica desligado. Animar "a página" seria
+ * mentira visual — a faixa de abas de Sistema não vem da tela nova, ela já
+ * estava lá.
+ *
+ * O EIXO DO MOVIMENTO É O EIXO DO NAVEGADOR. O rail é vertical, então trocar de
+ * tela desliza na vertical: descer no rail traz o conteúdo por baixo. A faixa de
+ * abas é horizontal, então trocar de aba desliza na horizontal: ir para uma aba
+ * à direita traz o painel pela direita.
+ *
+ * Tudo está dentro de `:active-view-transition-type(...)`, e isso não é enfeite:
+ * o HeroUI usa view transition na fila de toasts (toast.css), sem tipo nenhum.
+ * Uma regra `*` solta daqui pegaria os toasts dele junto. O tipo é a fronteira
+ * entre a nossa coreografia e a dele.
+ *
+ * Menos movimento (`prefers-reduced-motion`) é tratado na origem, em
+ * lib/view-transition.ts: a transição não começa. Silenciar por CSS deixaria o
+ * custo da captura em pé por nada.
+ *
+ * Sem `@layer` de propósito: regra sem camada ganha de regra em camada, e o
+ * @heroui/styles declara `::view-transition-old(*)` por conta própria.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Marcador do item ativo do rail — transição de CSS, não view transition
+ *
+ * A caixa vem medida do componente (components/app-rail.tsx). Aqui só o tempo,
+ * que é o mesmo da troca de tela: os dois acontecem no mesmo clique, e ver o
+ * marcador chegar antes ou depois da página denunciaria que são dois sistemas.
+ *
+ * SÓ a posição transiciona. Largura e altura chegam remedidas a cada quadro
+ * enquanto o rail fecha; animá-las aqui seria uma segunda animação correndo
+ * contra a medição, e o marcador ficaria atrás da própria caixa.
+ * ------------------------------------------------------------------------ */
+
+.rail-marker {
+  transition: translate 180ms var(--ease-out-quart);
+}
+
+/* `data-instant` corta o deslize quando é o LAYOUT que está mudando: aí o alvo
+   está em movimento e a transição só ficaria correndo atrás dele.
+
+   Isto mora aqui, e não numa classe `transition-none` do Tailwind, porque as
+   utilitárias vivem em @layer utilities e regra SEM camada (como a de cima)
+   ganha de regra em camada — a classe não teria efeito nenhum. */
+.rail-marker[data-instant] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail-marker {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * As regiões da view transition
+ *
+ * O truque que faz isso não pedir refactor de estrutura: um elemento nomeado é
+ * EXCLUÍDO do snapshot do ancestral nomeado. Nomear a página e o cabeçalho já
+ * separa "o corpo" de "a barra" — o cabeçalho virou um buraco no snapshot do
+ * corpo, e as duas camadas animam sozinhas.
+ * ------------------------------------------------------------------------ */
+
+.vt-page {
+  view-transition-name: page;
+  view-transition-class: page-part;
+}
+
+.vt-page-header {
+  view-transition-name: page-header;
+}
+
+/* O nome do painel de aba é único POR INSTÂNCIA e vem inline (design/tabs.tsx):
+   um diálogo com abas abre em cima de uma view com abas, e nome repetido
+   descarta a transição toda. Aqui ficam só as classes.
+
+   `page-part` junto: numa troca de TELA o painel da aba tem que andar com o
+   resto da página, senão a página desliza e o painel fica plantado. */
+.tabs__panel {
+  view-transition-class: page-part tab-panel;
+}
+
+/* ---------------------------------------------------------------------------
+ * Base: tempo e curva
+ *
+ * Só `animation-duration` e `animation-timing-function`, nunca `animation`
+ * inteiro: matar a animação de um `::view-transition-group` tira o morph
+ * automático do UA, que é o que faz o cabeçalho acomodar a diferença de altura
+ * entre uma view com descrição e uma sem.
+ *
+ * Curvas do próprio HeroUI (--ease-out-quart, --ease-out-quad): o app tem um
+ * vocabulário de movimento só.
+ * ------------------------------------------------------------------------ */
+
+html:active-view-transition-type(nav, tab)::view-transition-group(*),
+html:active-view-transition-type(nav, tab)::view-transition-old(*),
+html:active-view-transition-type(nav, tab)::view-transition-new(*) {
+  animation-duration: 180ms;
+  animation-timing-function: var(--ease-out-quart);
+}
+
+/* ---------------------------------------------------------------------------
+ * Região que NÃO participa
+ *
+ * `root` é o snapshot de tudo que não tem nome: barra de título, rail, painéis
+ * do rodapé, o material das barras fixas. Deixar o cross-fade padrão aqui
+ * congelaria a saída ao vivo de um pull por 180ms e achataria o blur dos
+ * overlays num bitmap.
+ *
+ * O snapshot antigo sai de cena na hora — e `animation: none` sozinho não faz
+ * isso: sem animação o pseudo-elemento fica em opacity 1 até a transição
+ * inteira acabar, e aí o conteúdo velho reaparece por trás dos buracos do novo.
+ * O novo é conteúdo AO VIVO, então entra direto, sem fade.
+ * ------------------------------------------------------------------------ */
+
+html:active-view-transition-type(nav, tab)::view-transition-old(root),
+html:active-view-transition-type(tab)::view-transition-old(page),
+html:active-view-transition-type(tab)::view-transition-old(page-header) {
+  animation: none;
+  opacity: 0;
+}
+
+html:active-view-transition-type(nav, tab)::view-transition-new(root),
+html:active-view-transition-type(tab)::view-transition-new(page),
+html:active-view-transition-type(tab)::view-transition-new(page-header) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ---------------------------------------------------------------------------
+ * Troca de tela — eixo vertical, o eixo do rail
+ * ------------------------------------------------------------------------ */
+
+html:active-view-transition-type(nav)::view-transition-old(.page-part),
+html:active-view-transition-type(nav)::view-transition-new(.page-part) {
+  /* `plus-lighter` é o padrão do UA e serve para cross-fade do MESMO conteúdo
+     (as duas metades somam exatamente o original). Com conteúdo diferente ele
+     soma luz e deixa um fantasma claro no meio do caminho. */
+  mix-blend-mode: normal;
+}
+
+html:active-view-transition-type(nav)::view-transition-old(.page-part) {
+  animation-name: vt-exit-up;
+
+  /* Saída mais curta que a entrada: dois textos em cross-fade na mesma caixa,
+     pelo mesmo tempo, ficam ilegíveis no meio. */
+  animation-duration: 110ms;
+  animation-timing-function: var(--ease-out-quad);
+
+  /* `forwards` não é opcional: o pseudo-elemento só é removido quando a
+     transição TODA termina (180ms). Sem fixar o último quadro, aos 110ms o
+     conteúdo antigo volta para opacity 1 e pisca por cima do novo. */
+  animation-fill-mode: forwards;
+}
+
+html:active-view-transition-type(nav)::view-transition-new(.page-part) {
+  animation-name: vt-enter-up;
+}
+
+html:active-view-transition-type(nav):active-view-transition-type(back)::view-transition-old(.page-part) {
+  animation-name: vt-exit-down;
+}
+
+html:active-view-transition-type(nav):active-view-transition-type(back)::view-transition-new(.page-part) {
+  animation-name: vt-enter-down;
+}
+
+/* O cabeçalho fica PARADO: nele o que muda é o texto, não o lugar. O morph do
+   grupo, que o UA faz sozinho, cuida da altura — que varia entre views com e
+   sem descrição. */
+html:active-view-transition-type(nav)::view-transition-old(page-header),
+html:active-view-transition-type(nav)::view-transition-new(page-header) {
+  animation-duration: 140ms;
+}
+
+/* ---------------------------------------------------------------------------
+ * Troca de aba — eixo horizontal, o eixo da faixa
+ * ------------------------------------------------------------------------ */
+
+html:active-view-transition-type(tab)::view-transition-old(.tab-panel),
+html:active-view-transition-type(tab)::view-transition-new(.tab-panel) {
+  mix-blend-mode: normal;
+}
+
+html:active-view-transition-type(tab)::view-transition-old(.tab-panel) {
+  animation-name: vt-exit-start;
+  animation-duration: 110ms;
+  animation-timing-function: var(--ease-out-quad);
+  animation-fill-mode: forwards;
+}
+
+html:active-view-transition-type(tab)::view-transition-new(.tab-panel) {
+  animation-name: vt-enter-start;
+}
+
+html:active-view-transition-type(tab):active-view-transition-type(back)::view-transition-old(.tab-panel) {
+  animation-name: vt-exit-end;
+}
+
+html:active-view-transition-type(tab):active-view-transition-type(back)::view-transition-new(.tab-panel) {
+  animation-name: vt-enter-end;
+}
+
+/* ---------------------------------------------------------------------------
+ * Quadros
+ *
+ * `translate` e não `transform`: o UA já anima `transform` no grupo, e o próprio
+ * HeroUI declara `will-change: translate, opacity` nestes pseudo-elementos.
+ * ------------------------------------------------------------------------ */
+
+@keyframes vt-exit-up {
+  to {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+}
+
+@keyframes vt-enter-up {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+@keyframes vt-exit-down {
+  to {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+
+@keyframes vt-enter-down {
+  from {
+    opacity: 0;
+    translate: 0 -8px;
+  }
+}
+
+@keyframes vt-exit-start {
+  to {
+    opacity: 0;
+    translate: -10px;
+  }
+}
+
+@keyframes vt-enter-start {
+  from {
+    opacity: 0;
+    translate: 10px;
+  }
+}
+
+@keyframes vt-exit-end {
+  to {
+    opacity: 0;
+    translate: 10px;
+  }
+}
+
+@keyframes vt-enter-end {
+  from {
+    opacity: 0;
+    translate: -10px;
+  }
+}

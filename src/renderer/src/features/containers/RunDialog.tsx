@@ -17,6 +17,7 @@ import {
   Separator,
   SwitchInput,
   Tabs,
+  TagsInput,
   TextAreaInput,
   TextInput,
   toast
@@ -51,13 +52,6 @@ const suggestName = (ref: string): string => {
 
 const joinPairs = (rows: PairRow[], sep: string): string[] =>
   rows.filter((r) => r.left.trim() && r.right.trim()).map((r) => `${r.left.trim()}${sep}${r.right.trim()}`)
-
-/** "a, b , c" → ["a","b","c"] (vazios descartados). */
-const splitList = (raw: string): string[] =>
-  raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
 
 const NO_NETWORK = '__none__'
 
@@ -172,16 +166,16 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
   // Rede & Ambiente (rede/aliases/dns/env-file/-P são só do motor CLI)
   const [networks, setNetworks] = useState<NetworkInfo[]>([])
   const [network, setNetwork] = useState(NO_NETWORK)
-  const [networkAliases, setNetworkAliases] = useState('')
+  const [networkAliases, setNetworkAliases] = useState<string[]>([])
   const [ip, setIp] = useState('')
   const [hostname, setHostname] = useState('')
   const [domainname, setDomainname] = useState('')
-  const [dns, setDns] = useState('')
-  const [dnsSearch, setDnsSearch] = useState('')
+  const [dns, setDns] = useState<string[]>([])
+  const [dnsSearch, setDnsSearch] = useState<string[]>([])
   const [envFile, setEnvFile] = useState('')
   const [publishAll, setPublishAll] = useState(false)
   // Volumes extras
-  const [tmpfs, setTmpfs] = useState('')
+  const [tmpfs, setTmpfs] = useState<string[]>([])
   // Uma especificação --mount por linha: elas têm vírgula dentro
   // (type=bind,source=…,target=…), então vírgula não serve de separador.
   const [mounts, setMounts] = useState('')
@@ -191,14 +185,14 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
   const [pull, setPull] = useState<RunContainerOptions['pull']>('missing')
   const [createOnly, setCreateOnly] = useState(false)
   const [user, setUser] = useState('')
-  const [labels, setLabels] = useState('')
+  const [labels, setLabels] = useState<string[]>([])
   const [stopSignal, setStopSignal] = useState('')
   const [stopTimeout, setStopTimeout] = useState('')
   // Recursos & Saúde (tudo só CLI)
   const [cpus, setCpus] = useState('')
   const [memory, setMemory] = useState('')
   const [shmSize, setShmSize] = useState('')
-  const [ulimits, setUlimits] = useState('')
+  const [ulimits, setUlimits] = useState<string[]>([])
   const [healthCmd, setHealthCmd] = useState('')
   const [healthInterval, setHealthInterval] = useState('')
   const [healthTimeout, setHealthTimeout] = useState('')
@@ -288,7 +282,7 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
         ? {}
         : {
             network: network !== NO_NETWORK ? network : undefined,
-            networkAliases: splitList(networkAliases),
+            networkAliases: networkAliases,
             ip: ip.trim() || undefined,
             mounts: mounts
               .split('\n')
@@ -301,12 +295,12 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
             cpus: cpus.trim() || undefined,
             memory: memory.trim() || undefined,
             envFile: envFile.trim() || undefined,
-            labels: splitList(labels),
-            dns: splitList(dns),
-            dnsSearch: splitList(dnsSearch),
+            labels: labels,
+            dns: dns,
+            dnsSearch: dnsSearch,
             shmSize: shmSize.trim() || undefined,
-            tmpfs: splitList(tmpfs),
-            ulimits: splitList(ulimits),
+            tmpfs: tmpfs,
+            ulimits: ulimits,
             stopSignal: stopSignal.trim() || undefined,
             stopTimeout: Number.isInteger(parsedStopTimeout) ? parsedStopTimeout : undefined,
             health
@@ -376,14 +370,31 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
     >
       {error && <ErrorAlert>{error}</ErrorAlert>}
 
-      <Tabs className="min-w-0" defaultSelectedKey="general">
-        <Tabs.List>
-          <Tabs.Tab id="general">Geral</Tabs.Tab>
-          <Tabs.Tab id="network">Rede &amp; Ambiente</Tabs.Tab>
-          <Tabs.Tab id="volumes">Volumes</Tabs.Tab>
-          <Tabs.Tab id="resources">Recursos</Tabs.Tab>
-          <Tabs.Tab id="advanced">Avançado</Tabs.Tab>
-        </Tabs.List>
+      <Tabs className="min-w-0" defaultSelectedKey="general" variant="secondary">
+        <Tabs.ListContainer>
+          <Tabs.List>
+            <Tabs.Tab id="general">
+              Geral
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="network">
+              Rede &amp; Ambiente
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="volumes">
+              Volumes
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="resources">
+              Recursos
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="advanced">
+              Avançado
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
         <Tabs.Panel className="flex flex-col gap-4 pt-4" id="general">
           <Select
@@ -545,12 +556,12 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
                     </ListBox>
                   </Select.Popover>
                 </Select>
-                <TextInput
+                <TagsInput
                   isDisabled={network === NO_NETWORK}
-                  hint="Outros nomes pelos quais o container responde na rede. Separe por vírgula."
+                  hint="Outros nomes pelos quais o container responde na rede."
                   label="Aliases na rede"
                   placeholder="ex.: web, site"
-                  value={networkAliases}
+                  values={networkAliases}
                   onChange={setNetworkAliases}
                 />
               </div>
@@ -563,18 +574,18 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
                 onChange={setIp}
               />
               <div className="grid grid-cols-2 gap-3">
-                <TextInput
-                  hint="Servidores consultados dentro do container. Separe por vírgula."
+                <TagsInput
+                  hint="Servidores consultados dentro do container."
                   label="Servidores DNS"
                   placeholder="ex.: 1.1.1.1, 8.8.8.8"
-                  value={dns}
+                  values={dns}
                   onChange={setDns}
                 />
-                <TextInput
-                  hint="Sufixos tentados em nomes sem domínio. Separe por vírgula."
+                <TagsInput
+                  hint="Sufixos tentados em nomes sem domínio."
                   label="Domínios de busca"
                   placeholder="ex.: svc.local"
-                  value={dnsSearch}
+                  values={dnsSearch}
                   onChange={setDnsSearch}
                 />
               </div>
@@ -594,19 +605,18 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
             />
           </div>
           {!nativeEngine && (
-            <div className="flex items-end gap-2">
-              <TextInput
-                className="flex-1"
-                hint="Arquivo com uma variável KEY=valor por linha (--env-file)."
-                label="Arquivo de variáveis"
-                placeholder="ex.: C:\projeto\.env"
-                value={envFile}
-                onChange={setEnvFile}
-              />
-              <IconAction label="Escolher arquivo" variant="secondary" onPress={() => void pickEnvFile()}>
-                <FolderOpen className="size-4" />
-              </IconAction>
-            </div>
+            <TextInput
+              action={{
+                label: 'Escolher arquivo',
+                icon: <FolderOpen className="size-4" />,
+                onPress: () => void pickEnvFile()
+              }}
+              hint="Arquivo com uma variável KEY=valor por linha (--env-file)."
+              label="Arquivo de variáveis"
+              placeholder="ex.: C:\projeto\.env"
+              value={envFile}
+              onChange={setEnvFile}
+            />
           )}
         </Tabs.Panel>
 
@@ -649,11 +659,12 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
           </div>
           {!nativeEngine && (
             <>
-              <TextInput
-                hint="Pontos de montagem em memória, separados por vírgula."
+              <TagsInput
+                commaSeparated={false}
+                hint="Pontos de montagem em memória."
                 label="Montagens tmpfs"
                 placeholder="ex.: /cache, /tmp/build"
-                value={tmpfs}
+                values={tmpfs}
                 onChange={setTmpfs}
               />
               <TextAreaInput
@@ -681,11 +692,11 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
                 <TextInput label="Memória" placeholder="ex.: 512M" value={memory} onChange={setMemory} />
                 <TextInput label="/dev/shm" placeholder="ex.: 64M" value={shmSize} onChange={setShmSize} />
               </div>
-              <TextInput
-                hint="Formato nome=soft:hard, separados por vírgula."
+              <TagsInput
+                hint="Formato nome=soft:hard."
                 label="Ulimits"
                 placeholder="ex.: nofile=1024:2048"
-                value={ulimits}
+                values={ulimits}
                 onChange={setUlimits}
               />
               <div className="field-group flex flex-col gap-3 px-4 py-3">
@@ -769,11 +780,11 @@ export default function RunDialog({ onClose, onDone }: Props): React.JSX.Element
                   value={user}
                   onChange={setUser}
                 />
-                <TextInput
-                  hint="Pares chave=valor separados por vírgula."
+                <TagsInput
+                  hint="Pares chave=valor."
                   label="Labels"
                   placeholder="ex.: app=site, env=dev"
-                  value={labels}
+                  values={labels}
                   onChange={setLabels}
                 />
               </div>

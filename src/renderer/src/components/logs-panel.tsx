@@ -116,7 +116,7 @@ export default function LogsPanel(): React.JSX.Element {
   }
 
   return (
-    <section className=" flex shrink-0 flex-col border-t border-separator">
+    <section className="flex shrink-0 flex-col border-t border-separator">
       <button
         aria-expanded={panelOpen}
         aria-label={panelOpen ? 'Recolher logs' : 'Expandir logs'}

@@ -1,6 +1,34 @@
 {
   "versoes": [
     {
+      "versao": "0.4.0",
+      "data": "2026-09-02",
+      "titulo": "Sistema em abas, o controle certo para cada tipo de dado e movimento entre as telas.",
+      "mudancas": {
+        "adicionado": [
+          "A tela Sistema virou quatro abas — Ambiente, Motor, API nativa e Atualizações —, cada uma respondendo a uma pergunta. Era uma página só, com os blocos numa grade de duas colunas onde metade ocupava as duas, e a escolha de motor, que decide o comportamento do app inteiro, ficava abaixo da dobra.",
+          "Uma tabela diz o que cada motor faz: 14 recursos, com marca de disponível na CLI e no Nativo. Ela substitui o parágrafo que explicava isso em prosa e deixa a pergunta “o que eu perco se trocar?” a uma varredura de olho — inclusive o que a prosa escondia: coleta de crash dump é o único recurso que só existe no motor nativo.",
+          "Campos que aceitam vários valores — portas, variáveis, volumes, montagens, rótulos, apelidos de rede, argumentos de build, segredos — mostram cada valor como um item removível, em vez de uma linha de texto separada por vírgula.",
+          "Campos numéricos ganharam botões de mais e menos, valor mínimo e as setas do teclado: tamanho e dono do volume, CPUs, memória e disco da sessão nativa, e a cauda dos logs.",
+          "Trocar de tela e trocar de aba passaram a ter movimento, no eixo do menu que você usou: o menu lateral é vertical, então a página entra por baixo no sentido em que o item desceu; a faixa de abas é horizontal, então o painel entra pelo lado. Cabeçalho, faixa de abas e painéis do rodapé ficam parados — só o que troca de conteúdo se move.",
+          "O realce do item ativo no menu lateral desliza até o item novo, em vez de apagar num lugar e acender no outro.",
+          "Quem liga “reduzir movimento” no Windows não vê animação nenhuma: as trocas continuam secas, como antes."
+        ],
+        "alterado": [
+          "A escolha entre o motor CLI e o nativo virou um grupo de opções de verdade. Eram dois botões independentes, que um leitor de tela anunciava como duas chaves separadas, sem dizer que ligar uma desliga a outra.",
+          "As abas do app ganharam desenho novo, alinhado ao menu lateral: sublinhado no item ativo, sem pílula e sem trilho pintado.",
+          "Uso de CPU e de memória passou a ser mostrado como medidor, e não como barra de progresso — é uma medição, não um avanço rumo a uma conclusão.",
+          "Nos quatro campos com seletor de arquivo ou pasta, o botão passou a ficar dentro da moldura do próprio campo.",
+          "O tamanho mínimo da janela subiu de 940×600 para 1180×700. A largura saiu do conteúdo real: com o menu aberto, a tabela de containers não cabia sem rolagem horizontal.",
+          "A aba de Referências saiu da tela Sistema."
+        ],
+        "corrigido": [
+          "Segredo e tmpfs com vírgula no valor viravam dois flags inválidos, e a CLI recusava o comando antes de começar. Era o caso do próprio exemplo que o campo sugeria (id=npmrc,src=C:\\Users\\eu\\.npmrc): ali a vírgula é parte do valor, não separador de lista.",
+          "Cinco campos mostravam o caminho de exemplo com a barra invertida dobrada."
+        ]
+      }
+    },
+    {
       "versao": "0.3.1",
       "data": "2026-09-02",
       "titulo": "Acerto com a CLI 2.9.9 — o que ela mudou, e o que ela ganhou.",

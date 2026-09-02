@@ -7,6 +7,7 @@ import {
   expectAlert,
   expectToast,
   fillField,
+  fillTags,
   menuAction,
   modal,
   row,
@@ -41,7 +42,7 @@ test.describe('Redes', () => {
     await fillField(dialog, 'Nome da rede', 'backend')
     await fillField(dialog, 'Sub-rede', '172.20.0.0/16')
     await fillField(dialog, 'Gateway', '172.20.0.1')
-    await fillField(dialog, 'Labels', 'app=site, env=dev')
+    await fillTags(dialog, 'Labels', 'app=site', 'env=dev')
     await toggleSwitch(dialog, 'Rede interna')
     await dialog.getByRole('button', { name: 'Criar rede' }).click()
 
@@ -102,7 +103,7 @@ test.describe('Redes', () => {
     await menuAction(page, 'Mais ações da rede', 'Conectar container', row(page, 'frontend'))
     const dialog = modal(page)
     await chooseOption(page, dialog.locator('[data-slot="select-trigger"]').first(), /^web/)
-    await fillField(dialog, 'Aliases na rede', 'api, backend')
+    await fillTags(dialog, 'Aliases na rede', 'api', 'backend')
     await fillField(dialog, 'Endereço IP', '172.18.0.10')
     await dialog.getByRole('button', { name: 'Conectar' }).click()
 

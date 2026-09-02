@@ -17,6 +17,18 @@ export async function goto(page: Page, view: ViewName): Promise<void> {
   await expect(page.getByRole('heading', { name: view, exact: true, level: 1 })).toBeVisible()
 }
 
+/**
+ * Abre uma aba da view e espera a seleção acontecer.
+ *
+ * Esperar o `aria-selected` importa: o React Aria só monta o painel da aba
+ * escolhida, então sem isso a asserção seguinte corre contra o painel antigo.
+ */
+export async function openTab(page: Page, name: string): Promise<void> {
+  const tab = page.getByRole('tab', { name, exact: true })
+  await tab.click()
+  await expect(tab).toHaveAttribute('aria-selected', 'true')
+}
+
 // ————————————————————————————————————————————————————— avisos
 
 /** Todos os toasts na tela (o conteúdo é o texto da mensagem). */
@@ -94,6 +106,46 @@ export async function toggleSwitch(scope: Page | Locator, label: string): Promis
 /** Preenche um campo de texto pelo rótulo. */
 export async function fillField(scope: Page | Locator, label: string, value: string): Promise<void> {
   await scope.getByRole('textbox', { name: label, exact: true }).fill(value)
+}
+
+/**
+ * Preenche um campo numérico (`NumberInput`).
+ *
+ * Digitado de verdade, e não com `fill`: o `NumberField` do React Aria mantém
+ * o texto em estado próprio e só publica o número no `onChange` quando o campo
+ * é confirmado. `fill` grava o `value` do DOM direto, o que faz o React Aria
+ * ler o campo como vazio e, no Enter, cair no `minValue` — um `fill('20')`
+ * chegava como 1 no formulário.
+ */
+export async function fillNumber(scope: Page | Locator, label: string, value: string): Promise<void> {
+  const campo = scope.getByRole('textbox', { name: label, exact: true })
+  await campo.press('ControlOrMeta+a')
+  await campo.pressSequentially(value)
+  await campo.press('Enter')
+}
+
+/**
+ * Acrescenta valores a um campo de lista (`TagsInput`), um chip por valor.
+ *
+ * Cada valor entra com Enter, que é o gesto do componente. Vírgula também
+ * confirmaria, mas escrever o Enter no teste deixa explícito o que a pessoa faz.
+ */
+export async function fillTags(scope: Page | Locator, label: string, ...values: string[]): Promise<void> {
+  const campo = scope.getByRole('textbox', { name: label, exact: true })
+  for (const value of values) {
+    // oxlint-disable-next-line no-await-in-loop -- digitação é sequencial por natureza
+    await campo.fill(value)
+    // oxlint-disable-next-line no-await-in-loop -- e cada valor só entra depois do Enter do anterior
+    await campo.press('Enter')
+  }
+}
+
+/** Limpa um campo numérico, que é como se pede "usa o padrão". */
+export async function clearField(scope: Page | Locator, label: string): Promise<void> {
+  const campo = scope.getByRole('textbox', { name: label, exact: true })
+  await campo.press('ControlOrMeta+a')
+  await campo.press('Delete')
+  await campo.press('Enter')
 }
 
 // ————————————————————————————————————————————————————— listas

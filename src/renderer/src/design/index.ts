@@ -21,6 +21,8 @@ export {
   Kbd,
   Label,
   ListBox,
+  Meter,
+  NumberField,
   Popover,
   ProgressBar,
   ScrollShadow,
@@ -30,9 +32,11 @@ export {
   Skeleton,
   Spinner,
   Switch,
-  Tabs,
+  Tag,
+  TagGroup,
   TextField,
   ToggleButton,
+  ToggleButtonGroup,
   Toast,
   ToastProvider,
   Tooltip,
@@ -41,15 +45,20 @@ export {
 
 // Composições do design system
 export { Group, PageBody, PageHeader, PageShell, SectionTitle } from './layout'
+// Tabs vem daqui, e não do HeroUI: o wrapper acrescenta a transição entre
+// painéis e o nome de região único por instância (ver design/tabs.tsx).
+export { Tabs } from './tabs'
 export {
   BareInput,
   CheckboxInput,
   Hint,
   IconAction,
   IconToggle,
+  NumberInput,
   SearchInput,
   SelectInput,
   SwitchInput,
+  TagsInput,
   TextAreaInput,
   TextInput
 } from './controls'

@@ -301,16 +301,22 @@ export default function ImagesView(): React.JSX.Element {
       <PageBody className="min-h-0 flex-1">
         {error && <ErrorAlert>{error}</ErrorAlert>}
 
-        <Tabs className="min-h-0 flex-1" defaultSelectedKey="local">
-          <Tabs.List>
-            <Tabs.Tab id="local">
-              Locais
-              <Chip className="ms-1.5" color="default" size="sm" variant="soft">
-                <Chip.Label>{images.length}</Chip.Label>
-              </Chip>
-            </Tabs.Tab>
-            <Tabs.Tab id="catalog">Catálogo</Tabs.Tab>
-          </Tabs.List>
+        <Tabs className="min-h-0 flex-1" defaultSelectedKey="local" variant="secondary">
+          <Tabs.ListContainer>
+            <Tabs.List>
+              <Tabs.Tab id="local">
+                Locais
+                <Chip color="default" size="sm" variant="soft">
+                  <Chip.Label>{images.length}</Chip.Label>
+                </Chip>
+                <Tabs.Indicator />
+              </Tabs.Tab>
+              <Tabs.Tab id="catalog">
+                Catálogo
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
 
           <Tabs.Panel className="flex min-h-0 flex-1 flex-col p-0 pt-4" id="local">
             <DataTable

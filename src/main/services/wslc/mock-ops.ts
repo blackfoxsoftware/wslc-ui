@@ -561,16 +561,25 @@ function addCliImage(ref: string): void {
 }
 
 const streamOps: StreamOps = {
-  logs: (id, sink) =>
-    fakeStream(sink, {
+  logs: (id, opts, sink) => {
+    // As opções aparecem na primeira linha: é o que deixa visível, na demo e
+    // no e2e, que a cauda e o carimbo de hora chegaram até a CLI.
+    const recorte = [
+      opts?.tail === undefined ? '' : `últimas ${opts.tail} linhas`,
+      opts?.timestamps ? 'com carimbo de hora' : '',
+      opts?.since ? `desde ${opts.since}` : '',
+      opts?.until ? `até ${opts.until}` : ''
+    ].filter(Boolean)
+    return fakeStream(sink, {
       lines: [
-        `[cli] acompanhando os logs de ${id}`,
+        `[cli] acompanhando os logs de ${id}${recorte.length > 0 ? ` (${recorte.join(', ')})` : ''}`,
         '2026/09/01 12:00:01 servidor iniciado',
         '2026/09/01 12:00:02 pronto para receber conexões'
       ],
-      follow: true,
+      follow: opts?.follow !== false,
       failWith: shouldFail('containers:logs') ? 'Erro: fluxo de logs interrompido.' : undefined
-    }),
+    })
+  },
   pull: (ref, sink) =>
     fakeStream(sink, {
       lines: [`Baixando ${ref}…`, 'Extraindo camadas…', `Pull de ${ref} concluído.`],
@@ -598,8 +607,14 @@ const streamOps: StreamOps = {
     }),
   build: (args, sink) => {
     const tag = args[args.indexOf('-t') + 1] ?? 'imagem'
+    const cache = args.includes('--no-cache') ? ' (sem cache)' : ''
+    const estagio = args.includes('--target') ? ` até ${args[args.indexOf('--target') + 1]}` : ''
     return fakeStream(sink, {
-      lines: ['PASSO 1/3 — FROM alpine:latest', 'PASSO 2/3 — COPY . /app', `PASSO 3/3 — marcada ${tag}`],
+      lines: [
+        `PASSO 1/3 — FROM alpine:latest${cache}`,
+        `PASSO 2/3 — COPY . /app${estagio}`,
+        `PASSO 3/3 — marcada ${tag}`
+      ],
       failWith: shouldFail('images:build') ? 'Erro: Containerfile não encontrado no contexto.' : undefined,
       onDone: () => addCliImage(tag)
     })

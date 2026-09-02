@@ -4,6 +4,7 @@ import { readNativeTuning, readSdkPath, settingsFilePath, writeNativeTuning, wri
 import { resolveWslcService } from '../services/wslc'
 import { currentEngine, getEngineStatus, setEngine } from '../services/wslc/engine'
 import { ops } from '../services/wslc/ops'
+import { buildBuildArgs } from '../services/wslc/stream-args'
 import { stopStream } from '../services/wslc/streams'
 import { closeTerminal, writeTerminal } from '../services/wslc/terminals'
 import { shutdownWslc } from '../shutdown'
@@ -62,18 +63,24 @@ export function registerIpc(): void {
     // Fase 2 do motor nativo: ciclo de vida de containers via wslcsdk quando ativo.
     'containers:list': ({ all }) =>
       currentEngine() === 'native' ? native.listContainers(all) : service.listContainers(all),
-    'containers:action': ({ action, id }) =>
-      currentEngine() === 'native' ? native.containerAction(action, id) : service.containerAction(action, id),
+    'containers:action': ({ action, id, options }) =>
+      currentEngine() === 'native'
+        ? native.containerAction(action, id, options)
+        : service.containerAction(action, id, options),
     'containers:prune': () =>
       currentEngine() === 'native' ? native.pruneContainers() : service.pruneContainers(),
     'containers:run': (opts) =>
       currentEngine() === 'native' ? native.runContainer(opts) : service.runContainer(opts),
-    'containers:exec': ({ id, command }) =>
-      currentEngine() === 'native' ? native.exec(id, command) : service.execInContainer(id, command),
-    'containers:logs': ({ id }, { event }) =>
+    'containers:exec': ({ id, command, options }) =>
+      currentEngine() === 'native'
+        ? native.exec(id, command, options)
+        : service.execInContainer(id, command, options),
+    // No motor nativo o log vem por callback desde o começo: cauda, carimbo de
+    // hora e recorte por data são da CLI, e a UI só os oferece nela.
+    'containers:logs': ({ id, options }, { event }) =>
       currentEngine() === 'native'
         ? native.streamLogs(id, rendererStreamSink(event.sender))
-        : stream.logs(id, rendererStreamSink(event.sender)),
+        : stream.logs(id, options, rendererStreamSink(event.sender)),
     // O SDK preview não expõe stats — no motor nativo a coluna fica vazia.
     'containers:stats': () => (currentEngine() === 'native' ? [] : service.getStats()),
     'containers:inspect': ({ id }) =>
@@ -93,6 +100,17 @@ export function registerIpc(): void {
             stderr: 'O SDK nativo não expõe exportação de containers — troque para o motor CLI.'
           }
         : service.exportContainer(id, path),
+    // Não há API de cópia no SDK (nenhuma das 62 funções do header 2.9.9) —
+    // `container cp` é exclusivo da CLI, e a UI esconde a ação no nativo.
+    'containers:copy': (opts) =>
+      currentEngine() === 'native'
+        ? {
+            ok: false,
+            code: 1,
+            stdout: '',
+            stderr: 'O SDK nativo não copia arquivos — troque para o motor CLI.'
+          }
+        : service.copyFiles(opts),
 
     // Fases 1 e 4 do motor nativo: imagens via wslcsdk quando ativo (pull com
     // progresso estruturado por camada; tag/load/import nativos).
@@ -101,8 +119,9 @@ export function registerIpc(): void {
       currentEngine() === 'native'
         ? native.pullImage(ref, rendererStreamSink(event.sender))
         : stream.pull(ref, rendererStreamSink(event.sender)),
-    'images:remove': ({ ref }) =>
-      currentEngine() === 'native' ? native.removeImage(ref) : service.removeImage(ref),
+    // O SDK deleta a imagem sem opções (nem força, nem --no-prune).
+    'images:remove': ({ ref, options }) =>
+      currentEngine() === 'native' ? native.removeImage(ref) : service.removeImage(ref, options),
     'images:prune': () => service.pruneImages(),
     'images:inspect': ({ ref }) => service.inspectImage(ref),
     'images:tag': ({ source, target }) =>
@@ -138,22 +157,19 @@ export function registerIpc(): void {
     'registry:logout': ({ server }) =>
       currentEngine() === 'native' ? native.logout(server) : service.logout(server),
     'images:search-registry': ({ query }) => host.searchRegistry(query),
-    'images:build': ({ tag, context, file }, { event }) => {
-      const args = ['build', '-t', tag]
-      if (file?.trim()) args.push('-f', file.trim())
-      args.push(context)
-      return stream.build(args, rendererStreamSink(event.sender))
-    },
+    // Build é sempre da CLI: o SDK não constrói imagem (a UI esconde no nativo).
+    'images:build': (opts, { event }) => stream.build(buildBuildArgs(opts), rendererStreamSink(event.sender)),
 
     // Fase 5: volumes VHD nativos (o SDK não enumera — a lista vem do readdir
     // de <storage>\volumes; volumes "guest" auto-criados não aparecem).
     'volumes:list': () => (currentEngine() === 'native' ? native.listVolumes() : service.listVolumes()),
-    'volumes:create': ({ name, vhd }) =>
+    // Labels são da CLI: o SDK cria o .vhdx e não guarda metadados.
+    'volumes:create': ({ name, vhd, labels }) =>
       currentEngine() === 'native'
         ? native.createVolume(name, vhd ?? { sizeMb: 1024, fixed: false })
-        : service.createVolume(name),
-    'volumes:remove': ({ name }) =>
-      currentEngine() === 'native' ? native.deleteVolume(name) : service.removeVolume(name),
+        : service.createVolume(name, vhd, labels),
+    'volumes:remove': ({ name, force }) =>
+      currentEngine() === 'native' ? native.deleteVolume(name) : service.removeVolume(name, force),
     'volumes:prune': () =>
       currentEngine() === 'native'
         ? {
@@ -171,10 +187,10 @@ export function registerIpc(): void {
     // não participam delas.
     'networks:list': () => service.listNetworks(),
     'networks:create': (opts) => service.createNetwork(opts),
-    'networks:remove': ({ name }) => service.removeNetwork(name),
+    'networks:remove': ({ name, force }) => service.removeNetwork(name, force),
     'networks:prune': () => service.pruneNetworks(),
     'networks:inspect': ({ name }) => service.inspectNetwork(name),
-    'networks:connect': ({ network, container }) => service.connectNetwork(network, container),
+    'networks:connect': (opts) => service.connectNetwork(opts),
     'networks:disconnect': ({ network, container }) => service.disconnectNetwork(network, container),
 
     'system:terminate-session': () => service.terminateSession(),

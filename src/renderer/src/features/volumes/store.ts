@@ -7,8 +7,8 @@ interface VolumesState {
   volumes: VolumeInfo[]
   error: string | null
   refresh: () => Promise<void>
-  /** Retorna true se o volume foi criado. `vhd` só vale no motor nativo. */
-  create: (name: string, vhd?: VhdVolumeOptions) => Promise<boolean>
+  /** Retorna true se o volume foi criado. `labels` só valem no motor CLI. */
+  create: (name: string, vhd?: VhdVolumeOptions, labels?: string[]) => Promise<boolean>
   remove: (name: string) => Promise<void>
   pruneUnused: () => Promise<void>
   removeAll: () => Promise<void>
@@ -25,8 +25,8 @@ export const useVolumesStore = create<VolumesState>()((set, get) => ({
       set({ error: errorMessage(e) })
     }
   },
-  create: async (name, vhd) => {
-    const res = await window.wslcApi.createVolume(name, vhd)
+  create: async (name, vhd, labels) => {
+    const res = await window.wslcApi.createVolume(name, vhd, labels)
     await get().refresh()
     if (res.ok) toast.success(`Volume "${name}" criado.`)
     else toast.danger(res.stderr || res.stdout || `Falha ao criar o volume "${name}".`)
@@ -54,7 +54,8 @@ export const useVolumesStore = create<VolumesState>()((set, get) => ({
     // Sequencial de propósito: não sobrecarregar a CLI do wslc.
     // oxlint-disable no-await-in-loop
     for (const volume of all) {
-      const res = await window.wslcApi.removeVolume(volume.name)
+      // -f é idempotência: a lista pode ter envelhecido entre ler e remover.
+      const res = await window.wslcApi.removeVolume(volume.name, true)
       if (!res.ok) failures++
     }
     // oxlint-enable no-await-in-loop

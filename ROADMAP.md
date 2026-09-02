@@ -133,7 +133,8 @@ implementá-la de ponta a ponta no app, substituindo gradualmente o wrapper da C
     mount continua negado) — não exposto. Hostname/DomainName do container e
     WorkingDirectory do processo (init E exec) funcionam. **Kill nativo** =
     `WslcStopContainer(sinal, timeout=0)` (o enum só tem HUP/INT/QUIT/KILL/TERM).
-    CLI: **`network prune` NÃO aceita `--force`** (o `-f` dele é `--filter`!) e
+    CLI (medido na 2.9.4; ver regra 19 para o que a 2.9.9 mudou):
+    **`network prune` NÃO aceita `--force`** (o `-f` dele é `--filter`!) e
     apaga SEM confirmação; `network connect` não tem `--alias` (só o run tem
     `--network-alias`); `network inspect` NÃO lista os containers conectados
     (o vínculo aparece no `container inspect`); remover rede com endpoints
@@ -147,6 +148,102 @@ implementá-la de ponta a ponta no app, substituindo gradualmente o wrapper da C
     erro "Não conectado" (ok=false). **Matar à força o processo que segura a
     sessão pode PERDER os registros de imagem do storage** e deixá-lo instável
     (crash no pull seguinte) — reset do storage resolve.
+
+19. **A CLI muda de contrato entre versões — reauditar a cada salto** (02/09/2026,
+    2.9.4 → 2.9.9, tudo medido nesta máquina). **O `--format json` virou NDJSON**
+    (um objeto por linha, sem array em volta) e `network list` renomeou `Id` para
+    `ID` — `JSON.parse` da saída inteira morre em "Unexpected non-whitespace
+    character after JSON", que foi como a view Redes quebrou. Por isso tudo passa
+    por `parseJsonLines`, que aceita as duas formas. **NENHUM dos quatro `prune`
+    aceita `--force`** (não é só o de redes): passá-lo é erro de uso e a limpeza
+    nem roda — e `image`/`volume prune` precisam de `--all`, senão limpam só as
+    pendentes / os anônimos. **`stats --no-stream` deixou de existir** (era o
+    nosso fallback, então `stats` vinha sempre vazio, sem erro). Ganharam
+    `--format json`: `image list`, `volume list` e `version`; `container list`
+    ganhou `StateChangedAt` e `stats` ganhou `PIDs`. **`volume create` ganhou
+    `-d/-o/-l`**, e o driver `vhd` aceita as MESMAS opções do SDK (`SizeBytes`
+    obrigatório, `Fixed`, `Uid`+`Gid` só em par) — o disco virtual deixou de ser
+    exclusivo do motor nativo. Três afirmações da regra 18 CAÍRAM: `network
+connect` agora tem `--network-alias`, `--ip`, `--link`, `--link-local-ip` e
+    `--driver-opt`; `network inspect` AGORA lista os containers conectados (mapa
+    `Containers` com nome, IPv4 e MAC); e existe uma opção **global `--session
+<nome>`** que alcança a sessão viva do app (`wslc --session WslcUi volume
+list` devolveu os VHDX que a UI criou) — a CLI não está mais isolada do
+    storage nativo. Continuam valendo: `container export` recusa container em
+    execução (WSLC_E_CONTAINER_IS_RUNNING, e deixa um .tar de 0 byte para trás) e
+    `system session list` segue sem `--format json`, com cabeçalhos localizados.
+    Lição de teste: fixture de CLI é CAPTURA LITERAL, nunca JSON escrito à mão —
+    o teste de redes passava contra um formato que a CLI nunca devolveu.
+
+20. **Existe changelog oficial — ler ANTES de auditar na mão** (02/09/2026).
+    Entre a 2.9.4 e a 2.9.9 saíram só duas releases, e as notas delas explicam
+    tudo o que medimos: [2.9.8](https://github.com/microsoft/WSL/releases/tag/2.9.8)
+    e [2.9.9](https://github.com/microsoft/WSL/releases/tag/2.9.9). O NDJSON e o
+    keyset novo vieram de PRs de PARIDADE COM O DOCKER — #41377 (network
+    list/inspect/prune), #41413 (volume list) e, principalmente, **#41160
+    "Align WSLC argument parser with Docker flag and value semantics"**, que é
+    de onde saiu o sumiço do `--force` nos prune. A regra prática: **quando a
+    wslc muda, ela muda PARA FICAR IGUAL AO DOCKER** — na dúvida sobre um
+    formato ou uma flag, o comportamento do docker é o melhor palpite.
+    A 2.9.8 também trouxe `wslc container cp` (**comando inteiro que a auditoria
+    da regra 18 não tinha**, porque foi feita contra uma lista nossa e não
+    contra a árvore de `--help` da CLI — enumerar recursivamente, sempre), o
+    idle-terminate das VMs de sessão por usuário (#41077) e, com ele, o erro
+    novo **WSLC_E_VM_NOT_RUNNING (0x80040610)**. Há **referência oficial da API
+    C** em `doc/docs/api-reference/c/` do microsoft/WSL: dela saiu a tabela de
+    HRESULTs que o app agora traduz (`hrText` em `native/bindings.ts`) e a
+    página **"Not Yet Implemented APIs"** — que, conferida contra a 2.9.9, está
+    **meio desatualizada**, e por isso doc oficial também se mede: ela lista
+    `WSLC_VHD_TYPE_FIXED` e UDP em `WslcSetContainerSettingsPortMappings` como
+    E_NOTIMPL, mas **o VHD FIXO funciona** (`WslcCreateSessionVhdVolume` com
+    fixed=true devolveu S_OK e um .vhdx de 71 MB pré-alocado contra 37 MB do
+    dinâmico; pela CLI, `-o Fixed=true` deu 109 MB contra 37 MB), enquanto
+    **UDP continua E_NOTIMPL de verdade** (0x80004001, medido chamando o
+    setter direto). Ou seja: a UI está certa ao oferecer "Fixo" e certa ao
+    recusar UDP com mensagem própria. O caso do fixo nunca tinha sido
+    exercitado no motor nativo — os testes só usavam `fixed: false` —, e agora
+    tem teste em `native/volumes.test.ts`.
+
+21. **A wslc copia o docker, mas os nomes curtos NÃO batem** (02/09/2026, ao
+    fechar a cobertura da 2.9.9 — cada um destes foi lido no `--help` do próprio
+    comando, não presumido do docker). `container logs` usa **`-n`**, não
+    `--tail`. `container stop` usa **`-t/--time`**, não `--timeout` (o
+    `--stop-timeout` do run é outro parâmetro, do container). `image build` usa
+    `-o` para **`--output`** (a spec do `docker buildx`), enquanto em `volume
+create` e `network create` o `-o` é **`--opt`**. E o mais perigoso: o **`-f`
+    de `volume rm` e `network rm` é "não gere erro se não existir"** —
+    idempotência, NÃO remoção forçada. Só `container rm` e `image rm` têm `-f`
+    de força de verdade. Confundir os dois faria a UI prometer o que a CLI não
+    faz; por isso o app usa o `-f` de volume/rede só na remoção em massa, onde
+    a lista pode ter envelhecido entre ler e remover.
+
+    O **`container cp` não é simétrico**, e não é igual ao docker (medido na
+    2.9.9 contra o `loja-web`): **entrando**, o destino tem que ser uma PASTA
+    que já existe — um caminho de arquivo dá `Could not find the file … in
+container` (ERROR_PATH_NOT_FOUND) se não existir, e `extraction point is not
+a directory` (E_FAIL) se existir, ou seja, a CLI **não renomeia**;
+    **saindo**, o destino pode ser um arquivo novo, que ela cria. Copiar pasta
+    inteira funciona nos dois sentidos, e o `-a` é aceito. O diálogo diz "Pasta
+    de destino" só do lado que entra, porque é onde a regra morde.
+
+    Onde a força existe, ela **não virou item de menu**: a ação normal continua
+    lá, e quando a CLI recusa por "em execução" / "em uso", o botão _Remover
+    mesmo assim_ aparece no próprio aviso da falha — quem clica já leu o
+    motivo. O dublê de `mock.ts` segue as mesmas duas regras, senão esse
+    caminho só existiria contra a máquina de verdade.
+
+    Sem `--tail` o `container logs` despeja o log **inteiro** desde o primeiro
+    byte: o botão da lista pede uma cauda (500 linhas) e o título do painel diz
+    qual recorte está vendo, porque a diferença entre "o log todo" e "as últimas
+    500" não aparece em lugar nenhum na tela. No motor nativo não há recorte
+    nenhum — o SDK entrega o log por callback —, então lá o título não promete.
+
+    O que é **só da CLI** some da tela no motor nativo em vez de falhar depois
+    de clicado: `container cp` (não existe API de cópia entre as 62 do header),
+    `image build`, `image save`, `container export` e as opções do `logs`. Já
+    `container stop -s/-t` e o `-w`/`-e` do `exec` valem nos DOIS: o
+    `WslcStopContainer` recebe sinal e espera, e o process settings tem
+    `WorkingDirectory` e `EnvVariables`. O `-u` do exec não tem equivalente.
 
 ## Fases
 
@@ -367,14 +464,26 @@ SDK novo demais dá segfault (`WslcGetSessionTerminationEvent` num WSL mais anti
 é recusado com `WSLC_E_SDK_UPDATE_NEEDED` em qualquer chamada. Duas assinaturas também mudaram sem
 mudança visível no header — ver `SdkAbi`.
 
-**Cobertura 100% da superfície do wslc 2.9.4 (CLI e SDK)** — tudo que a CLI e
-o wslcsdk.h expõem está na UI, implementado nos dois motores quando possível,
-ou documentado com o motivo quando não: `session enter/run/shell` (interativos
-de terminal — regra 18), `--cidfile`/`-i`/`-t` do run (sem sentido numa UI: o
-app já mostra o ID e tem terminal próprio), `SetSessionSettingsTimeout` (trava
-o create — regra 18), `WSLC_CONTAINER_FLAG_PRIVILEGED` (sem efeito no preview —
-regra 18) e as variantes de buffer `WslcImportSessionImage`/`WslcLoadSessionImage`
-(as `…FromFile` cobrem o mesmo caso).
+**Cobertura 100% da superfície do wslc 2.9.9 (CLI e SDK)** — auditada contra a
+árvore de `--help` da CLI, recursivamente, e contra as 62 funções do header.
+Tudo está na UI, implementado nos dois motores quando possível, ou documentado
+com o motivo quando não: `session enter/run/shell` (interativos de terminal —
+regra 18), `--cidfile`/`-i`/`-t` do run (sem sentido numa UI: o app já mostra o
+ID e tem terminal próprio), o `-` do `container cp` (origem por stdin: um
+diálogo não tem stdin para oferecer), o `-f/--filter` das listagens (a UI já
+filtra do lado dela, sobre a lista que tem em mãos), `SetSessionSettingsTimeout`
+(trava o create — regra 18), `WSLC_CONTAINER_FLAG_PRIVILEGED` (sem efeito no
+preview — regra 18) e as variantes de buffer
+`WslcImportSessionImage`/`WslcLoadSessionImage` (as `…FromFile` cobrem o mesmo
+caso).
+
+**Decidido:** a opção global `--session <nome>` (regra 19) alcança a sessão
+viva do app pela CLI, o que derrubava o comentário no topo do
+`scripts/cenario-nativo.ts`. O script **continua usando o SDK**, e o comentário
+foi corrigido: `--session` só alcança sessão VIVA — com o app aberto —, e o app
+aberto é justamente o que impede o seeder de rodar (um processo por sessão). O
+SDK é o único caminho que funciona com o app fechado, que é quando semear faz
+sentido. Expor a escolha de sessão na UI fica fora de escopo por ora.
 
 Riscos do preview: header avisa que a API pode quebrar entre releases — a DLL
 vendorizada fixa a versão; atualizar `vendor/` junto com o NuGet.

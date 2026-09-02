@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Play, SquareTerminal } from 'lucide-react'
-import type { ContainerInfo } from '@shared/schemas'
+import { FolderOpen, Play, SlidersHorizontal, SquareTerminal } from 'lucide-react'
+import type { ContainerInfo, ExecOptions } from '@shared/schemas'
 import { prettyInspect } from '@/components/inspect-sheet'
 import Sparkline from '@/components/sparkline'
-import { AppSheet, BareInput, Button, Mono, Skeleton, StateChip } from '@/design'
+import {
+  AppSheet,
+  BareInput,
+  Button,
+  IconAction,
+  IconToggle,
+  Mono,
+  Skeleton,
+  StateChip,
+  SwitchInput,
+  TextInput
+} from '@/design'
 import { useEngineStore } from '@/stores/engine-store'
 import { statsFor, useStatsStore } from '@/stores/stats-store'
 
@@ -62,6 +73,14 @@ export default function ContainerDetailsSheet({ container, onClose }: Props): Re
   const [command, setCommand] = useState('')
   const [execOutput, setExecOutput] = useState<string | null>(null)
   const [execRunning, setExecRunning] = useState(false)
+  // Opções do `wslc exec`. Ficam atrás de um botão porque o caso comum é
+  // rodar um comando e ler a saída — não configurar o ambiente dele.
+  const [showExecOptions, setShowExecOptions] = useState(false)
+  const [execUser, setExecUser] = useState('')
+  const [execWorkdir, setExecWorkdir] = useState('')
+  const [execEnv, setExecEnv] = useState('')
+  const [execEnvFile, setExecEnvFile] = useState('')
+  const [execDetach, setExecDetach] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -75,13 +94,38 @@ export default function ContainerDetailsSheet({ container, onClose }: Props): Re
     // oxlint-disable-next-line react/exhaustive-effect-dependencies, react-hooks/exhaustive-deps -- carrega uma vez ao abrir
   }, [])
 
+  const pickEnvFile = async (): Promise<void> => {
+    const path = await window.wslcApi.pickFile('Arquivo de variáveis (KEY=valor por linha)', ['env', '*'])
+    if (path) setExecEnvFile(path)
+  }
+
   const runExec = async (): Promise<void> => {
     const cmd = command.trim()
     if (!cmd || execRunning) return
     setExecRunning(true)
     try {
-      const res = await window.wslcApi.execInContainer(container.id || container.name, cmd)
-      setExecOutput(res.stdout || res.stderr || `(sem saída, código ${res.code})`)
+      // No motor nativo o SDK só tem diretório de trabalho e variáveis: as
+      // outras opções nem são oferecidas, para não prometer o que não faz.
+      const opts: ExecOptions = {
+        workdir: execWorkdir.trim() || undefined,
+        env: execEnv
+          .split(',')
+          .map((e) => e.trim())
+          .filter(Boolean),
+        ...(nativeEngine
+          ? {}
+          : {
+              user: execUser.trim() || undefined,
+              envFile: execEnvFile.trim() || undefined,
+              detach: execDetach || undefined
+            })
+      }
+      const res = await window.wslcApi.execInContainer(container.id || container.name, cmd, opts)
+      setExecOutput(
+        opts.detach
+          ? '(iniciado em segundo plano: a saída fica no log do container)'
+          : res.stdout || res.stderr || `(sem saída, código ${res.code})`
+      )
     } finally {
       setExecRunning(false)
     }
@@ -143,11 +187,74 @@ export default function ContainerDetailsSheet({ container, onClose }: Props): Re
               value={command}
               onChange={setCommand}
             />
+            <IconToggle isSelected={showExecOptions} label="Opções do exec" onChange={setShowExecOptions}>
+              <SlidersHorizontal className="size-4" />
+            </IconToggle>
             <Button isDisabled={execRunning || !command.trim()} size="sm" onPress={() => void runExec()}>
               <Play className="size-4" />
               {execRunning ? 'Rodando…' : 'Exec'}
             </Button>
           </div>
+
+          {showExecOptions && (
+            <div className="field-group flex flex-col gap-3 px-4 py-3">
+              <div className="grid grid-cols-2 gap-3">
+                <TextInput
+                  hint="Diretório de onde o comando roda dentro do container (-w)."
+                  label="Diretório de trabalho"
+                  placeholder="ex.: /app"
+                  value={execWorkdir}
+                  onChange={setExecWorkdir}
+                />
+                <TextInput
+                  isDisabled={nativeEngine}
+                  hint={
+                    nativeEngine
+                      ? 'O SDK nativo não escolhe o usuário do processo — recurso do motor CLI.'
+                      : 'Nome, uid ou uid:gid com que o comando roda (-u).'
+                  }
+                  label="Usuário"
+                  placeholder="ex.: 1000:1000"
+                  value={execUser}
+                  onChange={setExecUser}
+                />
+              </div>
+              <TextInput
+                hint="Pares CHAVE=valor separados por vírgula (-e)."
+                label="Variáveis de ambiente"
+                placeholder="ex.: DEBUG=1, TZ=Etc/UTC"
+                value={execEnv}
+                onChange={setExecEnv}
+              />
+              {!nativeEngine && (
+                <>
+                  <div className="flex items-end gap-2">
+                    <TextInput
+                      className="flex-1"
+                      hint="Arquivo com uma variável KEY=valor por linha (--env-file)."
+                      label="Arquivo de variáveis"
+                      placeholder="ex.: C:\projeto\.env"
+                      value={execEnvFile}
+                      onChange={setExecEnvFile}
+                    />
+                    <IconAction
+                      label="Escolher arquivo"
+                      variant="secondary"
+                      onPress={() => void pickEnvFile()}
+                    >
+                      <FolderOpen className="size-4" />
+                    </IconAction>
+                  </div>
+                  <SwitchInput
+                    hint="Não espera o comando terminar (-d): nenhuma saída volta para cá."
+                    isSelected={execDetach}
+                    label="Rodar em segundo plano"
+                    onChange={setExecDetach}
+                  />
+                </>
+              )}
+            </div>
+          )}
           {execOutput !== null && (
             <pre className="inset-well max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-relaxed">
               {execOutput}

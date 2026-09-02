@@ -72,11 +72,61 @@ describe('createMockWslcService', () => {
     expect((await svc.createNetwork({ name: 'frontend' })).ok).toBe(false)
     expect((await svc.createNetwork({ name: 'backend' })).ok).toBe(true)
     expect((await svc.listNetworks()).some((n) => n.name === 'backend')).toBe(true)
-    expect((await svc.connectNetwork('backend', 'web')).ok).toBe(true)
-    expect((await svc.connectNetwork('fantasma', 'web')).ok).toBe(false)
-    expect((await svc.connectNetwork('backend', 'fantasma')).ok).toBe(false)
+    expect((await svc.connectNetwork({ network: 'backend', container: 'web' })).ok).toBe(true)
+    expect((await svc.connectNetwork({ network: 'fantasma', container: 'web' })).ok).toBe(false)
+    expect((await svc.connectNetwork({ network: 'backend', container: 'fantasma' })).ok).toBe(false)
     expect((await svc.removeNetwork('backend')).ok).toBe(true)
     expect((await svc.listNetworks()).some((n) => n.name === 'backend')).toBe(false)
+  })
+
+  /**
+   * O dublê segue as MESMAS regras da CLI 2.9.9 nestes dois pontos, senão o
+   * caminho de "forçar" da UI só existiria contra a máquina de verdade.
+   */
+  it('remover container em execução exige força; imagem em uso também', async () => {
+    const svc = createMockWslcService()
+
+    const semForca = await svc.containerAction('remove', 'web')
+    expect(semForca.ok).toBe(false)
+    expect(semForca.stderr).toContain('em execução')
+    expect((await svc.listContainers(true)).some((c) => c.name === 'web')).toBe(true)
+
+    // nginx:latest é a imagem do container "web", que ainda está de pé.
+    expect((await svc.removeImage('nginx:latest')).ok).toBe(false)
+    expect((await svc.removeImage('nginx:latest', { force: true })).ok).toBe(true)
+
+    expect((await svc.containerAction('remove', 'web', { force: true })).ok).toBe(true)
+    expect((await svc.listContainers(true)).some((c) => c.name === 'web')).toBe(false)
+  })
+
+  it('o -f de volume e rede é idempotência, não força', async () => {
+    const svc = createMockWslcService()
+    expect((await svc.removeVolume('fantasma')).ok).toBe(false)
+    expect((await svc.removeVolume('fantasma', true)).ok).toBe(true)
+    expect((await svc.removeNetwork('fantasma')).ok).toBe(false)
+    expect((await svc.removeNetwork('fantasma', true)).ok).toBe(true)
+  })
+
+  it('copyFiles valida o container e descreve o sentido da cópia', async () => {
+    const svc = createMockWslcService()
+    const res = await svc.copyFiles({
+      container: 'web',
+      direction: 'from-container',
+      hostPath: 'C:\\saida',
+      containerPath: '/etc/nginx'
+    })
+    expect(res.ok).toBe(true)
+    expect(res.stdout).toContain('web:/etc/nginx → C:\\saida')
+    expect(
+      (
+        await svc.copyFiles({
+          container: 'fantasma',
+          direction: 'to-container',
+          hostPath: 'C:\\x',
+          containerPath: '/x'
+        })
+      ).ok
+    ).toBe(false)
   })
 
   it('kill marca o container como exited e export/logout respondem ok', async () => {

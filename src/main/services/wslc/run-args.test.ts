@@ -156,4 +156,54 @@ describe('buildRunArgs', () => {
     })
     expect(args).toEqual(['run', '--no-healthcheck', 'alpine'])
   })
+
+  it('--ip e --mount acompanham a rede escolhida', () => {
+    const args = buildRunArgs({
+      image: 'nginx',
+      detach: false,
+      rm: false,
+      network: 'backend',
+      ip: '172.20.0.10',
+      mounts: ['type=bind,source=C:\\projeto,target=/app,readonly', '  ']
+    })
+    expect(args).toEqual([
+      'run',
+      '--network',
+      'backend',
+      '--ip',
+      '172.20.0.10',
+      '--mount',
+      'type=bind,source=C:\\projeto,target=/app,readonly',
+      'nginx'
+    ])
+  })
+
+  it('--pull só aparece quando muda o padrão da CLI (missing)', () => {
+    expect(buildRunArgs({ image: 'nginx', detach: false, rm: false, pull: 'missing' })).toEqual([
+      'run',
+      'nginx'
+    ])
+    expect(buildRunArgs({ image: 'nginx', detach: false, rm: false, pull: 'always' })).toEqual([
+      'run',
+      '--pull',
+      'always',
+      'nginx'
+    ])
+  })
+
+  /**
+   * `container create` prepara o container parado — é o fluxo do docker para
+   * quem quer configurar agora e iniciar depois. Ele não aceita -d: não há o
+   * que desanexar num container que nem começou.
+   */
+  it('createOnly troca `run` por `container create` e derruba o -d', () => {
+    const args = buildRunArgs({
+      image: 'nginx',
+      name: 'web',
+      detach: true,
+      rm: false,
+      createOnly: true
+    })
+    expect(args).toEqual(['container', 'create', '--name', 'web', 'nginx'])
+  })
 })

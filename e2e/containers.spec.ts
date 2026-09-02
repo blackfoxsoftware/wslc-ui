@@ -2,6 +2,7 @@ import { ENGINES, expect, test } from './fixtures/app'
 import { runContainer } from './fixtures/actions'
 import {
   cancelConfirm,
+  chooseOption,
   closeSheet,
   closeStream,
   confirm,
@@ -11,7 +12,9 @@ import {
   menuAction,
   modal,
   row,
-  sheet
+  sheet,
+  toasts,
+  toggleSwitch
 } from './fixtures/ui'
 
 /**
@@ -83,6 +86,22 @@ for (const engine of ENGINES) {
       await confirm(page, 'Remover')
       await expectToast(page, 'Container "db" removido.')
       await expect(page.getByRole('row').filter({ hasText: 'db' })).toHaveCount(0)
+    })
+
+    /**
+     * A CLI recusa remover container em execução; o motor nativo remove com
+     * força sempre. Nos dois casos o clique em "Remover" resolve — no CLI
+     * pelo botão do toast, que é onde a força mora agora.
+     */
+    test('remover container em execução resolve pelo aviso da falha', async ({ page }) => {
+      await menuAction(page, 'Mais ações do container', 'Remover', row(page, 'web'))
+      await confirm(page, 'Remover')
+
+      const forcar = toasts(page).getByRole('button', { name: 'Remover mesmo assim' })
+      if (await forcar.count()) await forcar.first().click()
+
+      await expectToast(page, 'Container "web" removido.')
+      await expect(page.getByRole('row').filter({ hasText: 'web' })).toHaveCount(0)
     })
 
     test('"Mostrar parados" filtra a lista', async ({ page }) => {
@@ -171,6 +190,70 @@ test.describe('Containers · diferenças entre os motores', () => {
       await page.getByRole('button', { name: 'Expandir logs' }).click()
       await expect(page.getByText(/\(demo\) terminal externo pedido para/)).toBeVisible()
     })
+
+    /** `container cp` (2.9.8): o comando que faltava inteiro. */
+    test('copia um arquivo para dentro do container', async ({ page }) => {
+      await menuAction(page, 'Mais ações do container', 'Copiar arquivos', row(page, 'web'))
+      const dialog = modal(page)
+      await expect(dialog).toBeVisible()
+
+      await fillField(dialog, 'Origem no Windows', 'C:\\projeto\\site.conf')
+      // Entrando, o destino é uma PASTA existente: a wslc não renomeia (medido).
+      await fillField(dialog, 'Pasta de destino no container', '/etc/nginx/conf.d/')
+      await dialog.getByRole('button', { name: 'Copiar', exact: true }).click()
+
+      await expect(dialog).toHaveCount(0)
+      await expectToast(page, 'Copiado C:\\projeto\\site.conf → web:/etc/nginx/conf.d/.')
+    })
+
+    test('o sentido da cópia troca os rótulos dos dois lados', async ({ page }) => {
+      await menuAction(page, 'Mais ações do container', 'Copiar arquivos', row(page, 'web'))
+      const dialog = modal(page)
+
+      await expect(dialog.getByRole('textbox', { name: 'Origem no Windows' })).toBeVisible()
+      await expect(dialog.getByRole('textbox', { name: 'Pasta de destino no container' })).toBeVisible()
+
+      await chooseOption(
+        page,
+        dialog.locator('[data-slot="select-trigger"]').first(),
+        /Do container para o Windows/
+      )
+      await expect(dialog.getByRole('textbox', { name: 'Destino no Windows' })).toBeVisible()
+      await expect(dialog.getByRole('textbox', { name: 'Origem no container' })).toBeVisible()
+    })
+
+    /**
+     * Sem `--tail` a CLI despeja o log inteiro: o botão da lista já pede uma
+     * cauda, e o diálogo permite mudar o recorte.
+     */
+    test('os logs abrem com cauda, e o diálogo muda o recorte', async ({ page }) => {
+      await row(page, 'web').getByRole('button', { name: 'Logs' }).click()
+      await expect(page.getByText('Logs de web (últimas 500 linhas)')).toBeVisible()
+      await expect(page.getByText(/últimas 500 linhas/).first()).toBeVisible()
+      await closeStream(page)
+
+      await menuAction(page, 'Mais ações do container', 'Logs com opções', row(page, 'web'))
+      const dialog = modal(page)
+      await fillField(dialog, 'Últimas linhas', '20')
+      await toggleSwitch(dialog, 'Mostrar carimbo de hora')
+      await dialog.getByRole('button', { name: 'Ver logs' }).click()
+
+      await expect(page.getByText('Logs de web (últimas 20 linhas, com hora)')).toBeVisible()
+      await expect(page.getByText(/últimas 20 linhas, com carimbo de hora/)).toBeVisible()
+      await closeStream(page)
+    })
+
+    test('cria um container sem iniciar (`container create`)', async ({ page }) => {
+      await page.getByRole('button', { name: 'Executar container' }).click()
+      const dialog = modal(page)
+      await chooseOption(page, dialog.locator('[data-slot="select-trigger"]').first(), /^alpine:latest$/)
+      await fillField(dialog, 'Nome do container', 'e2e-parado')
+      await toggleSwitch(dialog, 'Criar sem iniciar')
+      await dialog.getByRole('button', { name: 'Criar sem iniciar' }).click()
+
+      await expect(dialog).toHaveCount(0)
+      await expectToast(page, /Container "e2e-parado" criado a partir de alpine:latest/)
+    })
   })
 
   test.describe('motor nativo', () => {
@@ -189,6 +272,9 @@ test.describe('Containers · diferenças entre os motores', () => {
       await row(page, 'web').getByRole('button', { name: 'Mais ações do container' }).click()
       await expect(page.getByRole('menuitem', { name: 'Terminal externo' })).toHaveCount(0)
       await expect(page.getByRole('menuitem', { name: 'Exportar filesystem' })).toHaveCount(0)
+      // O SDK não tem API de cópia, e o log dele vem inteiro por callback.
+      await expect(page.getByRole('menuitem', { name: 'Copiar arquivos' })).toHaveCount(0)
+      await expect(page.getByRole('menuitem', { name: 'Logs com opções' })).toHaveCount(0)
     })
 
     test('a lista do motor nativo é outra sessão, não a da CLI', async ({ page }) => {

@@ -49,6 +49,20 @@ test.describe('Redes', () => {
     await expect(row(page, 'backend')).toBeVisible()
   })
 
+  /** `--ip-range` chegou na 2.9.8 (PR #41138). */
+  test('cria uma rede com faixa de IPs automáticos', async ({ page }) => {
+    await page.getByRole('button', { name: 'Criar rede' }).click()
+    const dialog = modal(page)
+
+    await fillField(dialog, 'Nome da rede', 'com-faixa')
+    await fillField(dialog, 'Sub-rede', '172.30.0.0/16')
+    await fillField(dialog, 'Faixa de IPs automáticos', '172.30.10.0/24')
+    await dialog.getByRole('button', { name: 'Criar rede' }).click()
+
+    await expectToast(page, 'Rede "com-faixa" criada.')
+    await expect(row(page, 'com-faixa')).toBeVisible()
+  })
+
   test('recusa um nome que já existe', async ({ page }) => {
     await page.getByRole('button', { name: 'Criar rede' }).click()
     await fillField(modal(page), 'Nome da rede', 'frontend')
@@ -80,6 +94,27 @@ test.describe('Redes', () => {
     await expectToast(page, 'Container desconectado da rede "frontend".')
   })
 
+  /**
+   * Alias e IP fixo no connect chegaram na 2.9.8. A regra 18 do ROADMAP
+   * registrava que `network connect` não tinha alias — deixou de valer.
+   */
+  test('conecta com alias e IP fixo na rede', async ({ page }) => {
+    await menuAction(page, 'Mais ações da rede', 'Conectar container', row(page, 'frontend'))
+    const dialog = modal(page)
+    await chooseOption(page, dialog.locator('[data-slot="select-trigger"]').first(), /^web/)
+    await fillField(dialog, 'Aliases na rede', 'api, backend')
+    await fillField(dialog, 'Endereço IP', '172.18.0.10')
+    await dialog.getByRole('button', { name: 'Conectar' }).click()
+
+    await expectToast(page, 'Container conectado à rede "frontend".')
+  })
+
+  test('desconectar não oferece as opções do connect', async ({ page }) => {
+    await menuAction(page, 'Mais ações da rede', 'Desconectar container', row(page, 'frontend'))
+    await expect(modal(page).getByRole('textbox', { name: 'Aliases na rede' })).toHaveCount(0)
+    await expect(modal(page).getByRole('textbox', { name: 'Endereço IP' })).toHaveCount(0)
+  })
+
   test('remover pede confirmação e cancelar não remove', async ({ page }) => {
     await menuAction(page, 'Mais ações da rede', 'Remover', row(page, 'frontend'))
     await cancelConfirm(page)
@@ -89,7 +124,22 @@ test.describe('Redes', () => {
     await confirm(page, 'Remover')
 
     await expectToast(page, 'Rede "frontend" removida.')
-    await expect(page.getByText('Nenhuma rede')).toBeVisible()
+    await expect(row(page, 'frontend')).toHaveCount(0)
+    // As predefinidas seguem na lista: a CLI 2.9.9 as enumera e elas não somem.
+    await expect(row(page, 'bridge')).toBeVisible()
+  })
+
+  /**
+   * `bridge`, `host` e `none` são as redes predefinidas do docker. A wslc só
+   * passou a listá-las na 2.9.9 — antes a view só via as redes gerenciadas
+   * pela sessão, e por isso todo mundo era removível. Elas não podem ser
+   * apagadas, então o item fica desabilitado em vez de render um erro.
+   */
+  test('as redes predefinidas não podem ser removidas', async ({ page }) => {
+    await page.getByRole('button', { name: 'Mais ações da rede' }).first().click()
+    const item = page.getByRole('menuitem', { name: /Remover \(rede predefinida\)/ })
+    await expect(item).toBeVisible()
+    await expect(item).toHaveAttribute('data-disabled', /.*/)
   })
 
   test('limpeza das redes sem uso é confirmada pela UI', async ({ page }) => {

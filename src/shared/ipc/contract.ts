@@ -2,13 +2,18 @@ import { z } from 'zod'
 import {
   buildImageOptionsSchema,
   commandResultSchema,
+  containerActionOptionsSchema,
   containerActionSchema,
+  containerCopyOptionsSchema,
+  containerLogsOptionsSchema,
   containerSchema,
   containerStatsSchema,
+  connectNetworkOptionsSchema,
   createNetworkOptionsSchema,
   engineSchema,
   engineStatusSchema,
   environmentSchema,
+  execOptionsSchema,
   imageSchema,
   installProgressEventSchema,
   logEntrySchema,
@@ -18,6 +23,7 @@ import {
   nativeTuningSchema,
   networkSchema,
   registryImageSchema,
+  removeImageOptionsSchema,
   runContainerOptionsSchema,
   sdkProbeSchema,
   streamDataEventSchema,
@@ -48,16 +54,30 @@ export const invokeContract = {
 
   'containers:list': { input: z.object({ all: z.boolean() }), output: z.array(containerSchema) },
   'containers:action': {
-    input: z.object({ action: containerActionSchema, id: z.string().min(1) }),
+    input: z.object({
+      action: containerActionSchema,
+      id: z.string().min(1),
+      /** stop: sinal e espera; remove: forçar e volumes anônimos. */
+      options: containerActionOptionsSchema.optional()
+    }),
     output: commandResultSchema
   },
   'containers:prune': { input: z.void(), output: commandResultSchema },
   'containers:run': { input: runContainerOptionsSchema, output: commandResultSchema },
   'containers:exec': {
-    input: z.object({ id: z.string().min(1), command: z.string().min(1) }),
+    input: z.object({
+      id: z.string().min(1),
+      command: z.string().min(1),
+      options: execOptionsSchema.optional()
+    }),
     output: commandResultSchema
   },
-  'containers:logs': { input: z.object({ id: z.string().min(1) }), output: streamIdSchema },
+  // As opções de log são da CLI; o motor nativo ignora e sempre acompanha
+  // desde o começo (o SDK entrega o log por callback, sem recorte).
+  'containers:logs': {
+    input: z.object({ id: z.string().min(1), options: containerLogsOptionsSchema.optional() }),
+    output: streamIdSchema
+  },
   'containers:stats': { input: z.void(), output: z.array(containerStatsSchema) },
   'containers:inspect': { input: z.object({ id: z.string().min(1) }), output: commandResultSchema },
   'containers:open-terminal': { input: z.object({ id: z.string().min(1) }), output: z.void() },
@@ -70,10 +90,16 @@ export const invokeContract = {
     input: z.object({ id: z.string().min(1), path: z.string().min(1) }),
     output: commandResultSchema
   },
+  // `container cp` (2.9.8): copiar arquivos host ↔ container. Não existe API
+  // de cópia no SDK — a UI esconde a ação quando o motor é nativo.
+  'containers:copy': { input: containerCopyOptionsSchema, output: commandResultSchema },
 
   'images:list': { input: z.void(), output: z.array(imageSchema) },
   'images:pull': { input: z.object({ ref: z.string().min(1) }), output: streamIdSchema },
-  'images:remove': { input: z.object({ ref: z.string().min(1) }), output: commandResultSchema },
+  'images:remove': {
+    input: z.object({ ref: z.string().min(1), options: removeImageOptionsSchema.optional() }),
+    output: commandResultSchema
+  },
   'images:prune': { input: z.void(), output: commandResultSchema },
   'images:inspect': { input: z.object({ ref: z.string().min(1) }), output: commandResultSchema },
   'images:tag': {
@@ -113,10 +139,20 @@ export const invokeContract = {
   'volumes:list': { input: z.void(), output: z.array(volumeSchema) },
   // `vhd` só vale no motor nativo (WslcCreateSessionVhdVolume); a CLI ignora.
   'volumes:create': {
-    input: z.object({ name: z.string().min(1), vhd: vhdVolumeOptionsSchema.optional() }),
+    input: z.object({
+      name: z.string().min(1),
+      vhd: vhdVolumeOptionsSchema.optional(),
+      /** -l: pares chave=valor (só na CLI; o SDK não guarda labels). */
+      labels: z.array(z.string()).optional()
+    }),
     output: commandResultSchema
   },
-  'volumes:remove': { input: z.object({ name: z.string().min(1) }), output: commandResultSchema },
+  // `force` aqui é o -f da CLI: NÃO é remoção forçada, é "não erre se não
+  // existir" — serve para a remoção em massa não contar corrida como falha.
+  'volumes:remove': {
+    input: z.object({ name: z.string().min(1), force: z.boolean().optional() }),
+    output: commandResultSchema
+  },
   'volumes:prune': { input: z.void(), output: commandResultSchema },
   'volumes:inspect': { input: z.object({ name: z.string().min(1) }), output: commandResultSchema },
 
@@ -124,15 +160,16 @@ export const invokeContract = {
   // nativos não participam destas redes).
   'networks:list': { input: z.void(), output: z.array(networkSchema) },
   'networks:create': { input: createNetworkOptionsSchema, output: commandResultSchema },
-  'networks:remove': { input: z.object({ name: z.string().min(1) }), output: commandResultSchema },
+  /** `force` = o -f da CLI: idempotência (não erra se a rede não existir). */
+  'networks:remove': {
+    input: z.object({ name: z.string().min(1), force: z.boolean().optional() }),
+    output: commandResultSchema
+  },
   // ATENÇÃO: `network prune` NÃO aceita --force (o -f dele é --filter) e roda
   // sem confirmação — a confirmação fica na UI.
   'networks:prune': { input: z.void(), output: commandResultSchema },
   'networks:inspect': { input: z.object({ name: z.string().min(1) }), output: commandResultSchema },
-  'networks:connect': {
-    input: z.object({ network: z.string().min(1), container: z.string().min(1) }),
-    output: commandResultSchema
-  },
+  'networks:connect': { input: connectNetworkOptionsSchema, output: commandResultSchema },
   'networks:disconnect': {
     input: z.object({ network: z.string().min(1), container: z.string().min(1) }),
     output: commandResultSchema

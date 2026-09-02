@@ -229,6 +229,46 @@ export function hrHex(hr: number): string {
 }
 
 /**
+ * HRESULTs do wslcsdk traduzidos.
+ *
+ * A tabela é a de `doc/docs/api-reference/c/error-codes.md` do microsoft/WSL
+ * (16 códigos a partir de WSLC_E_BASE 0x0600), mais os poucos HRESULTs do
+ * Windows que a gente encontra na prática. Existe porque o SDK só devolve
+ * `errorMessage` em ALGUMAS chamadas: nas outras a pessoa via "0x80040610" e
+ * mais nada, o que não diz o que fazer nem o que aconteceu.
+ */
+const HR_TEXTO: Record<string, string> = {
+  '0x80040601': 'imagem não encontrada',
+  '0x80040602': 'o ID informado casa com mais de um container',
+  '0x80040603': 'container não encontrado',
+  '0x80040604': 'volume não encontrado',
+  '0x80040605': 'o container não está em execução',
+  '0x80040606': 'o container está em execução',
+  '0x80040607': 'nome de sessão reservado',
+  '0x80040608': 'nome de sessão inválido',
+  '0x80040609': 'rede não encontrada',
+  '0x8004060A': 'a busca no Windows Update falhou',
+  '0x8004060B': 'o SDK é mais novo que o WSL instalado — atualize o WSL ou escolha outra DLL em Sistema',
+  '0x8004060C': 'o recurso de containers está desabilitado',
+  '0x8004060D': 'o registry foi bloqueado por política',
+  '0x8004060E': 'o volume não está disponível',
+  '0x8004060F': 'sessão não encontrada',
+  // Novo na 2.9.9, junto com o encerramento por ociosidade da VM da sessão.
+  '0x80040610':
+    'a VM da sessão não está em execução — ela é encerrada por inatividade e volta na próxima operação',
+  '0x80004001': 'não implementado neste preview do SDK',
+  '0x80070005': 'acesso negado',
+  '0x80070032': 'não suportado (o WSL desta máquina não atende ao pedido)'
+}
+
+/** Hex + o que ele significa, quando conhecido. Para mensagem de erro na UI. */
+export function hrText(hr: number): string {
+  const hex = hrHex(hr)
+  const texto = HR_TEXTO[hex]
+  return texto === undefined ? hex : `${hex} (${texto})`
+}
+
+/**
  * Tipos koffi do wslcsdk.h, registrados UMA vez por processo.
  *
  * koffi registra struct/proto por NOME, num namespace global: repetir o

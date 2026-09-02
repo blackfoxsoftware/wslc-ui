@@ -1,6 +1,6 @@
 import { toast } from '@/design'
 import { create } from 'zustand'
-import type { CreateNetworkOptions, NetworkInfo } from '@shared/schemas'
+import type { ConnectNetworkOptions, CreateNetworkOptions, NetworkInfo } from '@shared/schemas'
 import { errorMessage } from '../../lib/errors'
 
 interface NetworksState {
@@ -11,7 +11,7 @@ interface NetworksState {
   create: (opts: CreateNetworkOptions) => Promise<boolean>
   remove: (name: string) => Promise<void>
   pruneUnused: () => Promise<void>
-  connect: (network: string, container: string) => Promise<boolean>
+  connect: (opts: ConnectNetworkOptions) => Promise<boolean>
   disconnect: (network: string, container: string) => Promise<boolean>
 }
 
@@ -45,9 +45,9 @@ export const useNetworksStore = create<NetworksState>()((set, get) => ({
     if (res.ok) toast.success(res.stdout.trim() || 'Redes sem containers removidas.')
     else toast.danger(res.stderr || res.stdout || 'Falha ao remover as redes sem uso.')
   },
-  connect: async (network, container) => {
-    const res = await window.wslcApi.connectNetwork(network, container)
-    if (res.ok) toast.success(`Container conectado à rede "${network}".`)
+  connect: async (opts) => {
+    const res = await window.wslcApi.connectNetwork(opts)
+    if (res.ok) toast.success(`Container conectado à rede "${opts.network}".`)
     else toast.danger(res.stderr || res.stdout || 'Falha ao conectar o container.')
     return res.ok
   },

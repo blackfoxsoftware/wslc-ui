@@ -19,6 +19,7 @@ export default function CreateNetworkDialog({ onClose, onDone }: Props): React.J
   const [name, setName] = useState('')
   const [subnet, setSubnet] = useState('')
   const [gateway, setGateway] = useState('')
+  const [ipRange, setIpRange] = useState('')
   const [internal, setInternal] = useState(false)
   const [labels, setLabels] = useState('')
   const [creating, setCreating] = useState(false)
@@ -32,6 +33,7 @@ export default function CreateNetworkDialog({ onClose, onDone }: Props): React.J
         name: trimmed,
         subnet: subnet.trim() || undefined,
         gateway: gateway.trim() || undefined,
+        ipRange: ipRange.trim() || undefined,
         internal: internal || undefined,
         labels: splitList(labels)
       })
@@ -82,6 +84,13 @@ export default function CreateNetworkDialog({ onClose, onDone }: Props): React.J
           onChange={setGateway}
         />
       </div>
+      <TextInput
+        hint="Opcional: sub-faixa da sub-rede de onde saem os IPs automáticos, deixando o resto livre para IPs fixos (--ip-range, CLI 2.9.8+)."
+        label="Faixa de IPs automáticos"
+        placeholder="ex.: 172.20.10.0/24"
+        value={ipRange}
+        onChange={setIpRange}
+      />
       <TextInput
         hint="Pares chave=valor separados por vírgula."
         label="Labels"

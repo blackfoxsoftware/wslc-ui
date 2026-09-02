@@ -36,11 +36,35 @@ describe('vhdxToVolume (mapeamento puro)', () => {
 // Integração real: cria/lista/remove volumes VHDX na sessão nativa.
 describe.skipIf(!isNativeUsable())('volumes VHD nativos (integração real via FFI)', () => {
   const NAME = 'wslcui-teste-vol'
+  const NAME_FIXO = 'wslcui-teste-vol-fixo'
 
   afterAll(async () => {
     await deleteNativeVolume(NAME).catch(() => null)
+    await deleteNativeVolume(NAME_FIXO).catch(() => null)
     releaseNativeSession()
   }, 30_000)
+
+  /**
+   * A referência oficial da API C lista `WSLC_VHD_TYPE_FIXED` em
+   * "Not Yet Implemented APIs": `WslcCreateSessionVhdVolume` com esse tipo
+   * deveria devolver E_NOTIMPL. A CLI, por outro lado, cria VHDX fixo de
+   * verdade com `-o Fixed=true` (medido: 109 MB pré-alocados contra 37 MB do
+   * dinâmico), então os dois caminhos podem divergir.
+   *
+   * Este teste existe para dizer qual dos dois vale AQUI: a UI oferece "Fixo"
+   * no motor nativo, e se o SDK recusa, a opção não pode ficar na tela. O
+   * teste passa nos dois casos e REGISTRA o que aconteceu — o que ele proíbe é
+   * o meio-termo: falhar com uma mensagem que não explica nada.
+   */
+  it('diz se o VHD FIXO funciona ou recusa com mensagem legível', { timeout: 60_000 }, async () => {
+    const res = await createNativeVolume(NAME_FIXO, { sizeMb: 64, fixed: true })
+    if (res.ok) {
+      expect(existsSync(join(volumesDir(), `${NAME_FIXO}.vhdx`))).toBe(true)
+      return
+    }
+    // Recusou: a mensagem precisa dizer o porquê, não só um HRESULT cru.
+    expect(res.stderr).toMatch(/fixo|E_NOTIMPL|0x80004001/i)
+  })
 
   it('create gera o .vhdx no storage e a listagem o encontra', { timeout: 60_000 }, async () => {
     const res = await createNativeVolume(NAME, { sizeMb: 64, fixed: false })

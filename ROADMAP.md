@@ -350,6 +350,23 @@ Electron é por pasta de dados). No caminho, uma brecha real foi fechada: o
 `setWindowOpenHandler` chamava `shell.openExternal` direto, fora do IPC — os
 links de referência em Sistema abririam o navegador até em modo demo.
 
+### O que a 2.9.9 do SDK mudou (medido)
+
+`WslcOpenContainer` **levanta a limitação principal** documentada acima: um container criado numa
+execução do app pode ser reaberto por nome ou ID em outra. Medido: soltar a sessão derruba o
+container para EXITED, mas o registro fica; reabrir devolve um handle utilizável, e `Start` o põe
+de volta em RUNNING. O app passou a lembrar em disco (`native/known.ts`) os containers que criou e a
+reabri-los, em vez de apagá-los ao fechar — o que só era necessário porque, sem abrir por ID, eles
+virariam órfãos invisíveis. Na ABI 2.9.3 o comportamento antigo continua.
+
+Continua **não havendo enumeração** de containers: o único jeito de reencontrá-los é o app lembrar
+os nomes.
+
+E há uma armadilha nova, já tratada em `native/bundled.ts`: o SDK precisa CASAR com a versão do WSL.
+SDK novo demais dá segfault (`WslcGetSessionTerminationEvent` num WSL mais antigo); SDK velho demais
+é recusado com `WSLC_E_SDK_UPDATE_NEEDED` em qualquer chamada. Duas assinaturas também mudaram sem
+mudança visível no header — ver `SdkAbi`.
+
 **Cobertura 100% da superfície do wslc 2.9.4 (CLI e SDK)** — tudo que a CLI e
 o wslcsdk.h expõem está na UI, implementado nos dois motores quando possível,
 ou documentado com o motivo quando não: `session enter/run/shell` (interativos

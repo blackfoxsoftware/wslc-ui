@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import {
   clearRegistryCredentials,
   DEFAULT_REGISTRY,
@@ -65,7 +65,7 @@ describe('logoutNativeRegistry (memória, sem SDK)', () => {
 })
 
 // Integração real: WslcSessionAuthenticate contra o Docker Hub (exige rede).
-describe.skipIf(locateWslcSdk() === null)('login nativo (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('login nativo (integração real via FFI)', () => {
   afterAll(() => {
     clearRegistryCredentials()
     releaseNativeSession()

@@ -23,10 +23,46 @@ export const WSLC_COMPONENT_FLAGS = {
   SDK_NEEDS_UPDATE: 4
 } as const
 
+/**
+ * O serviço recusou a DLL por ser velha demais para o WSL instalado. Chega em
+ * QUALQUER chamada, inclusive WslcGetVersion — ver bundled.ts.
+ */
+export const HR_SDK_UPDATE_NEEDED = '0x8004060B'
+
+/** WslcInstallOptions — só existe na ABI 2.9.9+. REPAIR reinstala o que já está lá. */
+export const WSLC_INSTALL_OPTIONS = {
+  NONE: 0,
+  REPAIR: 1
+} as const
+
 export interface NativeVersion {
   major: number
   minor: number
   revision: number
+}
+
+/**
+ * Qual ABI da wslcsdk.dll está carregada.
+ *
+ * Por que isto existe: entre 2.9.3 e 2.9.9 a Microsoft mudou DUAS assinaturas
+ * sem mudar nenhum tamanho de struct — `WslcSessionAuthenticate` ganhou um
+ * `tokenType` ANTES do `errorMessage`, e `WslcInstallWithDependencies` ganhou
+ * `components` e `options` na frente. Chamar a DLL com a aridade errada não dá
+ * erro de link: passa ponteiro no lugar de enum e corrompe silenciosamente.
+ *
+ * E não dá para perguntar a versão ao SDK: `WslcGetVersion` devolve a versão do
+ * **WSL instalado** (medido: 2.9.3 e 2.9.9 respondem igual na mesma máquina), e
+ * a DLL não traz metadados de versão de arquivo. Sobra detectar por símbolo —
+ * `WslcOpenContainer` só existe a partir da 2.9.9, e nasceu junto com as duas
+ * assinaturas novas. É o que `modern` decide.
+ *
+ * Isso não é zelo teórico: a aba Sistema deixa escolher qualquer DLL do disco.
+ */
+export interface SdkAbi {
+  /** ABI 2.9.9+ (símbolo WslcOpenContainer presente). */
+  modern: boolean
+  /** Rótulo curto, para a UI e o log. */
+  label: string
 }
 
 /** Assinatura genérica das funções nativas vinculadas (retornam HRESULT). */
@@ -107,6 +143,8 @@ export function decodeBytes(ptr: unknown, length: number): Buffer {
 // eslint típico: assinaturas centralizadas em um objeto para uso nas fases seguintes.
 export interface WslcSdk {
   dllPath: string
+  /** ABI detectada por símbolo — ver SdkAbi. */
+  abi: SdkAbi
   version(): NativeVersion
   missingComponents(): number
   /** Handles/funções cruas para as próximas fases (sessão, containers, processos, imagens). */
@@ -190,13 +228,17 @@ export function hrHex(hr: number): string {
   return `0x${(hr >>> 0).toString(16).toUpperCase()}`
 }
 
-/** Carrega a DLL e vincula toda a superfície do wslcsdk.h. Idempotente por caminho. */
-export function loadWslcSdk(dllPath: string): WslcSdk {
-  if (cached && cached.dllPath === dllPath) return cached
-  initCom()
-
-  const lib = koffi.load(dllPath)
-
+/**
+ * Tipos koffi do wslcsdk.h, registrados UMA vez por processo.
+ *
+ * koffi registra struct/proto por NOME, num namespace global: repetir o
+ * registro lança. Como o app pode carregar uma segunda DLL — a aba Sistema
+ * sonda a candidata que a pessoa escolheu antes de adotá-la —, o registro não
+ * pode morar dentro do load. Os tipos descrevem o header, não o binário, então
+ * compartilhá-los entre DLLs é correto: o que muda entre 2.9.3 e 2.9.9 são
+ * assinaturas de função, tratadas em SdkAbi.
+ */
+function buildTypes() {
   const WslcVersion = koffi.struct('WslcVersion', { major: 'uint32', minor: 'uint32', revision: 'uint32' })
   const SessionSettings = koffi.struct('WslcSessionSettings', {
     _opaque: koffi.array('uint64', SESSION_OPTIONS_U64)
@@ -285,15 +327,104 @@ export function loadWslcSdk(dllPath: string): WslcSdk {
   const P = koffi.pointer(ProcessSettings)
   const outHandle = koffi.out(koffi.pointer(HANDLE))
   const outErr = koffi.out(koffi.pointer('str16'))
+  return {
+    WslcVersion,
+    SessionSettings,
+    ContainerSettings,
+    ProcessSettings,
+    VhdRequirements,
+    PortMapping,
+    ContainerVolume,
+    NamedVolume,
+    ImageInfo,
+    PullImageOptions,
+    ImageProgressDetail,
+    ImageProgressMessage,
+    ImportImageOptions,
+    TagImageOptions,
+    PushImageOptions,
+    ProcessCallbacks,
+    CrashDumpInfo,
+    StdIOCallback,
+    ProcessExitCallback,
+    ImageProgressCallback,
+    InstallCallback,
+    CrashDumpCallback,
+    S,
+    C,
+    P,
+    outHandle,
+    outErr
+  }
+}
+
+type SdkTypes = ReturnType<typeof buildTypes>
+
+let sdkTypes: SdkTypes | null = null
+
+function types(): SdkTypes {
+  sdkTypes ??= buildTypes()
+  return sdkTypes
+}
+
+/** Vincula toda a superfície do wslcsdk.h a partir de uma DLL, sem cache. */
+function build(dllPath: string): { sdk: WslcSdk; lib: ReturnType<typeof koffi.load> } {
+  initCom()
+
+  const lib = koffi.load(dllPath)
+
+  const t = types()
+  // Só o que este corpo usa; o registro completo vai em `sdk.types`, de
+  // onde as fases nativas puxam os protótipos de callback.
+  const {
+    WslcVersion,
+    VhdRequirements,
+    PortMapping,
+    ContainerVolume,
+    NamedVolume,
+    ImageInfo,
+    PullImageOptions,
+    ImageProgressMessage,
+    ImportImageOptions,
+    TagImageOptions,
+    PushImageOptions,
+    ProcessCallbacks,
+    CrashDumpInfo,
+    InstallCallback,
+    CrashDumpCallback,
+    S,
+    C,
+    P,
+    outHandle,
+    outErr
+  } = t
+
+  /** Vincula um símbolo opcional; devolve null se ele não existir nesta DLL. */
+  const optional = (name: string, ret: string, args: unknown[]): NativeFn | null => {
+    try {
+      return lib.func(name, ret, args as never[]) as NativeFn
+    } catch {
+      return null
+    }
+  }
+
+  // Sonda da ABI — ver SdkAbi. WslcOpenContainer é o marcador da 2.9.9.
+  const openContainer = optional('WslcOpenContainer', HR, [HANDLE, PTR, outHandle, outErr])
+  const setInitProcessIO = optional('WslcSetContainerInitProcessIOCallbacks', HR, [
+    HANDLE,
+    koffi.pointer(ProcessCallbacks),
+    PTR
+  ])
+  const abi: SdkAbi = openContainer ? { modern: true, label: '2.9.9+' } : { modern: false, label: '2.9.3' }
 
   const raw: Record<string, NativeFn> = {
     // Instalação / versão
     WslcGetVersion: lib.func('WslcGetVersion', HR, [koffi.out(koffi.pointer(WslcVersion))]),
     WslcGetMissingComponents: lib.func('WslcGetMissingComponents', HR, [koffi.out(koffi.pointer('uint32'))]),
-    WslcInstallWithDependencies: lib.func('WslcInstallWithDependencies', HR, [
-      koffi.pointer(InstallCallback),
-      PTR
-    ]),
+    // 2.9.9 pôs `components` e `options` na frente (ver SdkAbi).
+    WslcInstallWithDependencies: abi.modern
+      ? lib.func('WslcInstallWithDependencies', HR, ['int32', 'int32', koffi.pointer(InstallCallback), PTR])
+      : lib.func('WslcInstallWithDependencies', HR, [koffi.pointer(InstallCallback), PTR]),
 
     // Sessão
     WslcInitSessionSettings: lib.func('WslcInitSessionSettings', HR, [PTR, PTR, S]),
@@ -321,14 +452,25 @@ export function loadWslcSdk(dllPath: string): WslcSdk {
       outErr
     ]),
     WslcReleaseCrashDumpSubscription: lib.func('WslcReleaseCrashDumpSubscription', HR, [HANDLE]),
-    WslcSessionAuthenticate: lib.func('WslcSessionAuthenticate', HR, [
-      HANDLE,
-      PTR,
-      PTR,
-      PTR,
-      koffi.out(koffi.pointer('str')),
-      outErr
-    ]),
+    // 2.9.9 encaixou `tokenType` ANTES do errorMessage (ver SdkAbi).
+    WslcSessionAuthenticate: abi.modern
+      ? lib.func('WslcSessionAuthenticate', HR, [
+          HANDLE,
+          PTR,
+          PTR,
+          PTR,
+          koffi.out(koffi.pointer('str')),
+          koffi.out(koffi.pointer('int32')),
+          outErr
+        ])
+      : lib.func('WslcSessionAuthenticate', HR, [
+          HANDLE,
+          PTR,
+          PTR,
+          PTR,
+          koffi.out(koffi.pointer('str')),
+          outErr
+        ]),
 
     // Container
     WslcInitContainerSettings: lib.func('WslcInitContainerSettings', HR, [PTR, C]),
@@ -357,6 +499,9 @@ export function loadWslcSdk(dllPath: string): WslcSdk {
       'uint32'
     ]),
     WslcCreateContainer: lib.func('WslcCreateContainer', HR, [HANDLE, C, outHandle, outErr]),
+    // Só existem na ABI 2.9.9+; quem usa precisa checar sdk.abi.modern antes.
+    ...(openContainer === null ? {} : { WslcOpenContainer: openContainer }),
+    ...(setInitProcessIO === null ? {} : { WslcSetContainerInitProcessIOCallbacks: setInitProcessIO }),
     WslcStartContainer: lib.func('WslcStartContainer', HR, [HANDLE, 'int32', outErr]),
     WslcCreateContainerProcess: lib.func('WslcCreateContainerProcess', HR, [HANDLE, P, outHandle, outErr]),
     // Recebe um Buffer.alloc(65) — o ID (64 hex + NUL) é escrito nele.
@@ -450,6 +595,7 @@ export function loadWslcSdk(dllPath: string): WslcSdk {
 
   const sdk: WslcSdk = {
     dllPath,
+    abi,
     version: () => {
       const out: Partial<NativeVersion> = {}
       const hr = raw['WslcGetVersion'](out)
@@ -466,31 +612,35 @@ export function loadWslcSdk(dllPath: string): WslcSdk {
     decodeImages: (ptr, count) => koffi.decode(ptr, koffi.array(ImageInfo, count)) as RawNativeImage[],
     decodeProgress: (ptr) => koffi.decode(ptr, ImageProgressMessage) as RawProgressMessage,
     decodeCrashDump: (ptr) => koffi.decode(ptr, CrashDumpInfo) as RawCrashDump,
-    types: {
-      WslcVersion,
-      SessionSettings,
-      ContainerSettings,
-      ProcessSettings,
-      VhdRequirements,
-      PortMapping,
-      ContainerVolume,
-      NamedVolume,
-      ImageInfo,
-      PullImageOptions,
-      ImageProgressMessage,
-      ImportImageOptions,
-      TagImageOptions,
-      PushImageOptions,
-      ProcessCallbacks,
-      StdIOCallback,
-      ProcessExitCallback,
-      ImageProgressCallback,
-      InstallCallback,
-      CrashDumpCallback,
-      CrashDumpInfo
-    },
+    types: t,
     alloc: koffi.alloc
   }
+  return { sdk, lib }
+}
+
+/** Carrega a DLL em uso. Idempotente por caminho. */
+export function loadWslcSdk(dllPath: string): WslcSdk {
+  if (cached && cached.dllPath === dllPath) return cached
+  const { sdk } = build(dllPath)
   cached = sdk
   return sdk
+}
+
+/**
+ * Carrega uma DLL CANDIDATA sem tocar no cache — é o que a aba Sistema usa
+ * para ler versão e ABI de um arquivo escolhido antes de adotá-lo.
+ *
+ * O `unload` recusa descarregar a DLL em uso: a sessão nativa viva tem handles
+ * dela, e puxar o tapete derrubaria o app. Sondar a que já está carregada é o
+ * caso comum (a pessoa reabre o diálogo e escolhe a mesma), então isso não é
+ * hipótese remota.
+ */
+export function probeWslcSdk(dllPath: string): { sdk: WslcSdk; unload: () => void } {
+  const { sdk, lib } = build(dllPath)
+  return {
+    sdk,
+    unload: () => {
+      if (cached?.dllPath !== dllPath) lib.unload()
+    }
+  }
 }

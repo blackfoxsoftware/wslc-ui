@@ -17,6 +17,7 @@ import type {
   NetworkInfo,
   RegistryImage,
   RunContainerOptions,
+  SdkProbe,
   StreamDataEvent,
   StreamExitEvent,
   StreamProgressEvent,
@@ -92,6 +93,12 @@ export interface WslcApi {
   setNativeTuning(tuning: NativeTuning): Promise<void>
   /** Termina e recria a sessão nativa aplicando o tuning (mantém imagens). */
   restartNativeSession(): Promise<CommandResult>
+  /** Caminho da wslcsdk.dll escolhida (null = a empacotada com o app). */
+  sdkPath(): Promise<string | null>
+  /** Abre o diálogo e sonda o arquivo escolhido; null se cancelou. */
+  pickSdk(): Promise<SdkProbe | null>
+  /** Grava a escolha — vale na próxima abertura do app. */
+  setSdkPath(path: string | null): Promise<void>
   /** Estado da API nativa (wslcsdk.dll via FFI). */
   getNativeStatus(): Promise<NativeStatus>
   /** Motor atual (CLI ou nativo) e estado da sessão nativa. */

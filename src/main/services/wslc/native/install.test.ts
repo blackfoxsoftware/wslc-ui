@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { InstallProgressEvent } from '@shared/schemas'
 import { componentLabel, installNativeComponents } from './install'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 
 describe('componentLabel (puro)', () => {
   it('nomeia os componentes conhecidos', () => {
@@ -17,7 +17,7 @@ describe('componentLabel (puro)', () => {
 
 // Integração real: nesta máquina (completa) a instalação guiada é um no-op
 // idempotente — S_OK sem nenhum callback de progresso (validado por probe).
-describe.skipIf(locateWslcSdk() === null)('instalação guiada (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('instalação guiada (integração real via FFI)', () => {
   it('é idempotente em máquina completa (ok, sem progresso)', { timeout: 60_000 }, async () => {
     const events: InstallProgressEvent[] = []
     const res = await installNativeComponents((ev) => events.push(ev))

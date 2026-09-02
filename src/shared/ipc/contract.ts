@@ -19,6 +19,7 @@ import {
   networkSchema,
   registryImageSchema,
   runContainerOptionsSchema,
+  sdkProbeSchema,
   streamDataEventSchema,
   streamExitEventSchema,
   streamProgressEventSchema,
@@ -172,6 +173,11 @@ export const invokeContract = {
   'system:set-native-tuning': { input: nativeTuningSchema, output: z.void() },
   // Termina e recria a sessão nativa (mantém imagens; containers são perdidos).
   'system:restart-native': { input: z.void(), output: commandResultSchema },
+
+  // Escolha da wslcsdk.dll (a versão dela decide se o motor nativo funciona).
+  'system:sdk-path': { input: z.void(), output: z.string().nullable() },
+  'system:pick-sdk': { input: z.void(), output: sdkProbeSchema.nullable() },
+  'system:set-sdk-path': { input: z.object({ path: z.string().nullable() }), output: z.void() },
 
   'streams:stop': { input: z.object({ streamId: streamIdSchema }), output: z.void() },
 

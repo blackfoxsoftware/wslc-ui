@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   cleanupNativeContainers,
   execNativeContainer,
@@ -11,8 +11,8 @@ import {
   runNativeContainer,
   streamNativeLogs
 } from './containers'
-import { locateWslcSdk } from './locate'
-import { releaseNativeSession, setNativeSessionTuning } from './session'
+import { isNativeUsable } from './status'
+import { acquireNativeSession, releaseNativeSession, setNativeSessionTuning } from './session'
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -22,13 +22,65 @@ const uniq = Date.now().toString(36)
 
 // oxlint-disable no-await-in-loop, no-unmodified-loop-condition -- polling intencional (callbacks mudam o estado)
 
+/**
+ * Remove TUDO da sessão nativa.
+ *
+ * Precisa existir porque, na ABI 2.9.9, fechar o app deixou de apagar
+ * containers — eles são reabertos na execução seguinte, de propósito. Ótimo
+ * para quem usa, péssimo para um teste que conta containers: sem limpar
+ * ANTES, sobra de execução anterior entra na conta.
+ */
+const removerTodos = async (): Promise<void> => {
+  for (const c of await listNativeContainers(true)) {
+    // oxlint-disable-next-line no-await-in-loop -- sequencial (handles nativos)
+    await nativeContainerAction('remove', c.id)
+  }
+}
+
 // Integração real: cria containers de verdade na sessão "WslcUi" (exige a
 // wslcsdk.dll e a imagem alpine:latest já puxada para a sessão nativa).
-describe.skipIf(locateWslcSdk() === null)('containers nativos (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('containers nativos (integração real via FFI)', () => {
+  beforeAll(removerTodos, 60_000)
+
   afterAll(async () => {
+    await removerTodos()
     await cleanupNativeContainers()
     releaseNativeSession()
-  }, 30_000)
+  }, 60_000)
+
+  // A limitação levantada pela ABI 2.9.9: antes, fechar o app apagava os
+  // containers nativos, porque sem WslcOpenContainer eles virariam órfãos
+  // invisíveis. Aqui o ciclo inteiro é exercitado num processo só —
+  // cleanup solta os handles e esvazia o registro em memória, e a listagem
+  // seguinte precisa trazer o container de volta do arquivo.
+  it('container sobrevive ao fechamento do app e é reaberto', { timeout: 90_000 }, async () => {
+    const nome = `wslcuireabre${uniq}`
+    const res = await runNativeContainer({
+      image: 'alpine:latest',
+      name: nome,
+      command: 'sh -c "sleep 60"',
+      detach: true,
+      rm: false
+    })
+    expect(res.ok, res.stderr).toBe(true)
+
+    const { sdk } = await acquireNativeSession()
+    if (!sdk.abi.modern) return // ABI 2.9.3: o comportamento correto é apagar mesmo
+
+    // Fechar o app: com a ABI nova, isto NÃO apaga — só solta os handles.
+    await cleanupNativeContainers()
+    expect(nativeContainerCount()).toBe(0)
+
+    // Próxima execução: a listagem reabre pelo que ficou lembrado em disco.
+    const depois = await listNativeContainers(true)
+    const reaberto = depois.find((c) => c.name === nome)
+    expect(reaberto, `container ${nome} não voltou: ${depois.map((c) => c.name).join(', ')}`).toBeDefined()
+
+    // E dá para operá-lo de novo — reabrir sem poder agir seria inútil.
+    const removido = await nativeContainerAction('remove', nome)
+    expect(removido.ok, removido.stderr).toBe(true)
+    expect((await listNativeContainers(true)).some((c) => c.name === nome)).toBe(false)
+  })
 
   it('run → logs por callback → estado exited com código → remove', { timeout: 60_000 }, async () => {
     const res = await runNativeContainer({

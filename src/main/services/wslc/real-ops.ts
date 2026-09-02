@@ -23,6 +23,8 @@ import {
   tagNativeImage
 } from './native/image-ops'
 import { installNativeComponents } from './native/install'
+import { getCustomSdkPath, setCustomSdkPath } from './native/locate'
+import { probeSdkFile } from './native/probe'
 import { loginNativeRegistry, logoutNativeRegistry } from './native/registry'
 import {
   ensureNativeSession,
@@ -62,6 +64,9 @@ const nativeOps: NativeOps = {
   setOnSessionEnded: setOnNativeSessionEnded,
   setOnCrashDump: setOnNativeCrashDump,
   status: getNativeStatus,
+  getSdkPath: getCustomSdkPath,
+  setSdkPath: setCustomSdkPath,
+  probeSdk: probeSdkFile,
   install: installNativeComponents,
 
   listContainers: listNativeContainers,

@@ -17,7 +17,10 @@ const envIncompleto: WslcEnvironment = {
 const nativeStatus = (available: boolean) => ({
   available,
   dllPath: available ? 'C:\\vendor\\wslcsdk.dll' : null,
-  sdkVersion: available ? '2.9.4' : null,
+  source: available ? ('bundled' as const) : null,
+  wslVersion: available ? '2.9.4' : null,
+  abi: available ? '2.9.9+' : null,
+  sizeBytes: available ? 4_929_888 : null,
   missingComponents: [],
   detail: 'teste'
 })

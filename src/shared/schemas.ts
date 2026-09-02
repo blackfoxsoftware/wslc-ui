@@ -181,11 +181,44 @@ export const containerStatsSchema = z.object({
   blockIO: z.string()
 })
 
+/** De onde saiu a wslcsdk.dll em uso, na ordem de precedência do locate. */
+export const sdkSourceSchema = z.enum(['env', 'custom', 'bundled', 'system'])
+
 /** Estado da API nativa (wslcsdk.dll via FFI). */
 export const nativeStatusSchema = z.object({
   available: z.boolean(),
   dllPath: z.string().nullable(),
-  sdkVersion: z.string().nullable(),
+  source: sdkSourceSchema.nullable(),
+  /**
+   * Versão do WSL **instalado**, como o SDK a reporta. NÃO é a versão da DLL:
+   * WslcGetVersion devolve o mesmo número para binários diferentes (medido com
+   * 2.9.3 e 2.9.9 na mesma máquina), e a DLL não traz metadados de arquivo.
+   */
+  wslVersion: z.string().nullable(),
+  /** ABI detectada por símbolo — '2.9.9+' ou '2.9.3'. Ver SdkAbi. */
+  abi: z.string().nullable(),
+  /** Tamanho da DLL: o único jeito barato de distinguir dois binários. */
+  sizeBytes: z.number().nullable(),
+  missingComponents: z.array(z.string()),
+  detail: z.string()
+})
+
+/**
+ * Resultado de sondar uma wslcsdk.dll candidata, escolhida na aba Sistema.
+ *
+ * A sonda carrega a DLL num binding próprio, lê o que ela sabe dizer e a
+ * descarrega — sem trocar a que está em uso, que só muda ao reabrir o app.
+ */
+export const sdkProbeSchema = z.object({
+  path: z.string(),
+  /** false = não é uma wslcsdk.dll utilizável (não carregou, faltam símbolos). */
+  ok: z.boolean(),
+  /** Versão do WSL instalado, como ESTA DLL a reporta. */
+  wslVersion: z.string().nullable(),
+  abi: z.string().nullable(),
+  sizeBytes: z.number().nullable(),
+  /** Identidade forte do binário — a única forma de distinguir duas DLLs. */
+  sha256: z.string().nullable(),
   missingComponents: z.array(z.string()),
   detail: z.string()
 })
@@ -345,6 +378,8 @@ export type ContainerStats = z.infer<typeof containerStatsSchema>
 export type BuildImageOptions = z.infer<typeof buildImageOptionsSchema>
 export type RegistryImage = z.infer<typeof registryImageSchema>
 export type NativeStatus = z.infer<typeof nativeStatusSchema>
+export type SdkSource = z.infer<typeof sdkSourceSchema>
+export type SdkProbe = z.infer<typeof sdkProbeSchema>
 export type Engine = z.infer<typeof engineSchema>
 export type EngineStatus = z.infer<typeof engineStatusSchema>
 export type NativeSessionEndedEvent = z.infer<typeof nativeSessionEndedEventSchema>

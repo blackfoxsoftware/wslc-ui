@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import { releaseNativeSession } from './session'
 import {
   createNativeVolume,
@@ -34,7 +34,7 @@ describe('vhdxToVolume (mapeamento puro)', () => {
 })
 
 // Integração real: cria/lista/remove volumes VHDX na sessão nativa.
-describe.skipIf(locateWslcSdk() === null)('volumes VHD nativos (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('volumes VHD nativos (integração real via FFI)', () => {
   const NAME = 'wslcui-teste-vol'
 
   afterAll(async () => {

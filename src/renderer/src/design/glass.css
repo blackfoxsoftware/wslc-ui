@@ -135,11 +135,12 @@
   .tooltip,
   .toast,
   .menu-item,
-  .list-box-item,
-  .tabs__list-container,
-  .tabs__tab {
+  .list-box-item {
     border-radius: var(--radius);
   }
+
+  /* Aba ficou fora da lista de propósito: na variante `secondary` ela não tem
+     caixa visível para arredondar — quem marca a ativa é o fio embaixo. */
 
   /* Hierarquia dos botões: o ciano marca a ação principal e o estado ativo.
      O secundário do HeroUI vem com texto no acento, o que empata os dois
@@ -148,22 +149,48 @@
     --button-fg: var(--default-foreground);
   }
 
-  /* Abas: controle segmentado compacto, alinhado à esquerda. Sem esticar cada
-     aba para a mesma largura (o padrão do HeroUI) e sem trilho pintado: a aba
-     ativa é que recebe o tom de controle. */
-  .tabs__list-container {
-    @apply w-fit bg-transparent;
-  }
-
+  /* ---------------------------------------------------------------------
+   * Abas: navegação sublinhada (variante `secondary` do HeroUI)
+   *
+   * Aba é navegação, não controle ligado/desligado. A variante primária pinta
+   * a aba ativa com `--segment`, o mesmo tom do botão secundário — o que dava
+   * duas gramáticas de "ativo" no app e um retângulo pintado a mais na faixa
+   * do topo. Toda aba do app usa `variant="secondary"`: hairline sob a faixa,
+   * aba ativa em texto claro e um fio de 2px no acento que DESLIZA entre as
+   * abas (`Tabs.Indicator`, o SelectionIndicator do React Aria).
+   *
+   * Composição obrigatória, e é da lib: <Tabs variant="secondary"> envolve
+   * <Tabs.ListContainer> (é ela que carrega o hairline e o indicador) e cada
+   * <Tabs.Tab> precisa ter um <Tabs.Indicator /> dentro. Sem o container as
+   * regras da variante não casam, e sem o indicador não há sublinhado.
+   *
+   * Aqui só ficam as medidas: compacta, alinhada à esquerda e sem esticar cada
+   * aba para a mesma largura (o padrão do HeroUI).
+   * ------------------------------------------------------------------ */
   .tabs__tab {
-    @apply w-auto px-3;
+    @apply h-9 w-auto gap-2 px-3 font-normal;
   }
 
-  /* A aba ativa é pintada direto: o indicador do HeroUI é um componente de
-     coleção do React Aria e não pode ser filho avulso da lista. */
   .tabs__tab[data-selected='true'] {
-    background-color: var(--segment);
-    color: var(--foreground);
+    font-weight: var(--font-weight-medium);
+  }
+
+  /* Hover do HeroUI é `opacity-70`, que APAGA ainda mais uma aba já em cinza.
+     Aqui hover clareia, como em todo o resto do app. */
+  @media (hover: hover) {
+    .tabs__tab:not([data-selected='true']):not([data-disabled='true']):hover,
+    .tabs__tab[data-hovered='true']:not([data-selected='true']):not([data-disabled='true']) {
+      @apply opacity-100;
+
+      color: var(--foreground);
+    }
+  }
+
+  /* O painel não tem material próprio: o respiro é de quem usa (PageBody na
+     view, pt-4 no diálogo). Com o p-2 do HeroUI o conteúdo da aba ficava 8px
+     mais para dentro que o resto do formulário em volta. */
+  .tabs__panel {
+    @apply p-0;
   }
 
   /* Estado ligado de um toggle usa o acento, igual ao item ativo do rail:

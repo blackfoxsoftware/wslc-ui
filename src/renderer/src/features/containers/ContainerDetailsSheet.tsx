@@ -7,7 +7,6 @@ import {
   AppSheet,
   BareInput,
   Button,
-  IconAction,
   IconToggle,
   Mono,
   Skeleton,
@@ -228,23 +227,18 @@ export default function ContainerDetailsSheet({ container, onClose }: Props): Re
               />
               {!nativeEngine && (
                 <>
-                  <div className="flex items-end gap-2">
-                    <TextInput
-                      className="flex-1"
-                      hint="Arquivo com uma variável KEY=valor por linha (--env-file)."
-                      label="Arquivo de variáveis"
-                      placeholder="ex.: C:\projeto\.env"
-                      value={execEnvFile}
-                      onChange={setExecEnvFile}
-                    />
-                    <IconAction
-                      label="Escolher arquivo"
-                      variant="secondary"
-                      onPress={() => void pickEnvFile()}
-                    >
-                      <FolderOpen className="size-4" />
-                    </IconAction>
-                  </div>
+                  <TextInput
+                    action={{
+                      label: 'Escolher arquivo',
+                      icon: <FolderOpen className="size-4" />,
+                      onPress: () => void pickEnvFile()
+                    }}
+                    hint="Arquivo com uma variável KEY=valor por linha (--env-file)."
+                    label="Arquivo de variáveis"
+                    placeholder="ex.: C:\projeto\.env"
+                    value={execEnvFile}
+                    onChange={setExecEnvFile}
+                  />
                   <SwitchInput
                     hint="Não espera o comando terminar (-d): nenhuma saída volta para cá."
                     isSelected={execDetach}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AppModal, Button, SelectInput, TextInput } from '@/design'
+import { AppModal, Button, NumberInput, SelectInput, TagsInput, TextInput } from '@/design'
 import { useVolumesStore } from './store'
 
 interface Props {
@@ -29,46 +29,38 @@ export default function CreateVolumeDialog({ nativeEngine, onClose, onDone }: Pr
   const create = useVolumesStore((s) => s.create)
   const [name, setName] = useState('')
   const [driver, setDriver] = useState<'guest' | 'vhd'>('guest')
-  const [sizeMb, setSizeMb] = useState('1024')
+  const [sizeMb, setSizeMb] = useState<number | undefined>(1024)
   const [type, setType] = useState<'dynamic' | 'fixed'>('dynamic')
-  const [uid, setUid] = useState('')
-  const [gid, setGid] = useState('')
-  const [labels, setLabels] = useState('')
+  const [uid, setUid] = useState<number | undefined>()
+  const [gid, setGid] = useState<number | undefined>()
+  const [labels, setLabels] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
 
   // No motor nativo não há escolha: a sessão só cria VHDX.
   const vhdVolume = nativeEngine || driver === 'vhd'
 
-  const parsedSize = Number.parseInt(sizeMb, 10)
-  const sizeOk = !vhdVolume || (Number.isFinite(parsedSize) && parsedSize > 0)
+  // O NumberInput já recusa o que não é número inteiro no intervalo: aqui só
+  // resta perguntar se o campo foi preenchido.
+  const sizeOk = !vhdVolume || sizeMb !== undefined
   // uid e gid andam juntos: ou os dois, ou nenhum (root:root).
-  const ownerGiven = uid.trim() !== '' || gid.trim() !== ''
-  const parsedUid = Number.parseInt(uid, 10)
-  const parsedGid = Number.parseInt(gid, 10)
-  const ownerOk =
-    !vhdVolume ||
-    !ownerGiven ||
-    (Number.isInteger(parsedUid) && parsedUid >= 0 && Number.isInteger(parsedGid) && parsedGid >= 0)
+  const ownerGiven = uid !== undefined || gid !== undefined
+  const ownerFull = uid !== undefined && gid !== undefined
+  const ownerOk = !vhdVolume || !ownerGiven || ownerFull
 
   const submit = async (): Promise<void> => {
     const trimmed = name.trim()
-    if (!trimmed || !sizeOk || !ownerOk) return
+    if (!trimmed || !sizeOk || !ownerOk || (vhdVolume && sizeMb === undefined)) return
     setCreating(true)
     try {
       const vhd = vhdVolume
         ? {
-            sizeMb: parsedSize,
+            sizeMb: sizeMb as number,
             fixed: type === 'fixed',
-            owner: ownerGiven ? { uid: parsedUid, gid: parsedGid } : undefined
+            owner: ownerFull ? { uid: uid as number, gid: gid as number } : undefined
           }
         : undefined
       // Labels são da CLI (-l): o SDK cria o .vhdx e não guarda metadados.
-      const lista = nativeEngine
-        ? undefined
-        : labels
-            .split(',')
-            .map((l) => l.trim())
-            .filter(Boolean)
+      const lista = nativeEngine ? undefined : labels
       if (await create(trimmed, vhd, lista)) onDone()
     } finally {
       setCreating(false)
@@ -116,11 +108,11 @@ export default function CreateVolumeDialog({ nativeEngine, onClose, onDone }: Pr
       )}
 
       {!nativeEngine && (
-        <TextInput
-          hint="Pares chave=valor separados por vírgula. Aparecem no inspect do volume."
+        <TagsInput
+          hint="Pares chave=valor. Aparecem no inspect do volume."
           label="Labels"
           placeholder="ex.: app=site, env=dev"
-          value={labels}
+          values={labels}
           onChange={setLabels}
         />
       )}
@@ -128,7 +120,7 @@ export default function CreateVolumeDialog({ nativeEngine, onClose, onDone }: Pr
       {vhdVolume && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <TextInput
+            <NumberInput
               hint="Tamanho do disco virtual, em MB."
               label="Tamanho"
               value={sizeMb}
@@ -142,14 +134,16 @@ export default function CreateVolumeDialog({ nativeEngine, onClose, onDone }: Pr
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <TextInput
+            <NumberInput
+              minValue={0}
               hint="Opcional. uid e gid andam juntos; vazio deixa o volume como root."
               label="uid do dono"
               placeholder="root"
               value={uid}
               onChange={setUid}
             />
-            <TextInput
+            <NumberInput
+              minValue={0}
               hint="Opcional. uid e gid andam juntos; vazio deixa o volume como root."
               label="gid do dono"
               placeholder="root"

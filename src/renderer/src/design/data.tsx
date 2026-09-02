@@ -1,4 +1,4 @@
-import { Chip, ProgressBar, Table } from '@heroui/react'
+import { Chip, Meter, Table } from '@heroui/react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -108,23 +108,24 @@ interface MetricProps {
   ariaLabel: string
 }
 
-/** Número tabular + trilho fino. Usado em CPU/memória por container. */
+/**
+ * Número tabular + trilho fino. Usado em CPU/memória por container.
+ *
+ * `Meter`, não `ProgressBar`: uso de CPU é uma MEDIÇÃO dentro de uma faixa,
+ * não progresso rumo a uma conclusão. A diferença é audível — um leitor de
+ * tela anuncia progressbar como tarefa em andamento, o que faria parecer que
+ * o container está fazendo alguma coisa que vai terminar.
+ */
 export function Metric({ percent, label, ariaLabel }: MetricProps): React.JSX.Element {
   if (percent === undefined) return <span className="text-muted">-</span>
   const tone = percent >= 90 ? 'danger' : percent >= 70 ? 'warning' : 'accent'
   return (
-    <ProgressBar
-      aria-label={ariaLabel}
-      className="gap-1"
-      color={tone}
-      size="sm"
-      value={Math.min(100, percent)}
-    >
+    <Meter aria-label={ariaLabel} className="gap-1" color={tone} size="sm" value={Math.min(100, percent)}>
       <span className="font-mono text-xs text-foreground">{label}</span>
-      <ProgressBar.Track className="h-1">
-        <ProgressBar.Fill />
-      </ProgressBar.Track>
-    </ProgressBar>
+      <Meter.Track className="h-1">
+        <Meter.Fill />
+      </Meter.Track>
+    </Meter>
   )
 }
 

@@ -1,18 +1,11 @@
 import { useState } from 'react'
-import { AppModal, Button, SwitchInput, TextInput } from '@/design'
+import { AppModal, Button, SwitchInput, TagsInput, TextInput } from '@/design'
 import { useNetworksStore } from './store'
 
 interface Props {
   onClose: () => void
   onDone: () => void
 }
-
-/** Vírgulas separam itens; vazios são descartados. */
-const splitList = (raw: string): string[] =>
-  raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
 
 export default function CreateNetworkDialog({ onClose, onDone }: Props): React.JSX.Element {
   const create = useNetworksStore((s) => s.create)
@@ -21,7 +14,7 @@ export default function CreateNetworkDialog({ onClose, onDone }: Props): React.J
   const [gateway, setGateway] = useState('')
   const [ipRange, setIpRange] = useState('')
   const [internal, setInternal] = useState(false)
-  const [labels, setLabels] = useState('')
+  const [labels, setLabels] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
 
   const submit = async (): Promise<void> => {
@@ -35,7 +28,7 @@ export default function CreateNetworkDialog({ onClose, onDone }: Props): React.J
         gateway: gateway.trim() || undefined,
         ipRange: ipRange.trim() || undefined,
         internal: internal || undefined,
-        labels: splitList(labels)
+        labels: labels
       })
       if (ok) onDone()
     } finally {
@@ -91,11 +84,11 @@ export default function CreateNetworkDialog({ onClose, onDone }: Props): React.J
         value={ipRange}
         onChange={setIpRange}
       />
-      <TextInput
-        hint="Pares chave=valor separados por vírgula."
+      <TagsInput
+        hint="Pares chave=valor."
         label="Labels"
         placeholder="ex.: app=site, env=dev"
-        value={labels}
+        values={labels}
         onChange={setLabels}
       />
       <div className="field-row px-4 py-3">

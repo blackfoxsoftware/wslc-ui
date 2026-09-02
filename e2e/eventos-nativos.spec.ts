@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures/app'
 import { runContainer } from './fixtures/actions'
-import { closeSheet, expectToast, fillField, row, sheet } from './fixtures/ui'
+import { closeSheet, expectToast, fillField, openTab, row, sheet } from './fixtures/ui'
 
 /**
  * Eventos que só o motor nativo emite: crash dump de um processo Linux dentro
@@ -45,6 +45,8 @@ test('sessão nativa encerrada por fora avisa que será recriada', async ({ page
 
   await closeSheet(page)
   // O estado do motor é recarregado: a sessão deixa de constar como ativa.
+  // O estado dela mora na aba Motor de Sistema.
   await page.getByRole('link', { name: 'Sistema', exact: true }).click()
+  await openTab(page, 'Motor')
   await expect(page.getByText('criada na primeira operação', { exact: true })).toBeVisible()
 })

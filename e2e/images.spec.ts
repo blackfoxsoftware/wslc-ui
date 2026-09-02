@@ -8,6 +8,7 @@ import {
   expectStreamFinished,
   expectToast,
   fillField,
+  fillTags,
   menuAction,
   modal,
   row,
@@ -236,7 +237,7 @@ test.describe('Imagens · só no motor CLI', () => {
 
     await fillField(dialog, 'Tag da imagem', 'app:multi')
     await dialog.getByRole('button', { name: 'Escolher pasta' }).click()
-    await fillField(dialog, 'Argumentos de build', 'VERSION=1.2.0')
+    await fillTags(dialog, 'Argumentos de build', 'VERSION=1.2.0')
     await toggleSwitch(dialog, 'Ignorar o cache')
 
     await dialog.getByRole('tab', { name: 'Avançado' }).click()

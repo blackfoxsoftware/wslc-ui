@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ContainerInfo } from '@shared/schemas'
-import { AppModal, Button, SelectInput, TextInput } from '@/design'
+import { AppModal, Button, SelectInput, TagsInput, TextInput } from '@/design'
 import { useNetworksStore } from './store'
 
 interface Props {
@@ -24,24 +24,17 @@ const COPY = {
   }
 } as const
 
-/** Vírgulas separam itens; vazios são descartados. */
-const splitList = (raw: string): string[] =>
-  raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-
 export default function ConnectContainerDialog({ network, mode, onClose }: Props): React.JSX.Element {
   const connect = useNetworksStore((s) => s.connect)
   const disconnect = useNetworksStore((s) => s.disconnect)
   const [containers, setContainers] = useState<ContainerInfo[]>([])
   const [selected, setSelected] = useState('')
   // Opções que a 2.9.8 acrescentou ao `network connect` (PR #41070).
-  const [aliases, setAliases] = useState('')
+  const [aliases, setAliases] = useState<string[]>([])
   const [ip, setIp] = useState('')
-  const [links, setLinks] = useState('')
-  const [linkLocalIps, setLinkLocalIps] = useState('')
-  const [driverOpts, setDriverOpts] = useState('')
+  const [links, setLinks] = useState<string[]>([])
+  const [linkLocalIps, setLinkLocalIps] = useState<string[]>([])
+  const [driverOpts, setDriverOpts] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const copy = COPY[mode]
 
@@ -64,11 +57,11 @@ export default function ConnectContainerDialog({ network, mode, onClose }: Props
         ? connect({
             network,
             container: selected,
-            aliases: splitList(aliases),
+            aliases: aliases,
             ip: ip.trim() || undefined,
-            links: splitList(links),
-            linkLocalIps: splitList(linkLocalIps),
-            driverOpts: splitList(driverOpts)
+            links: links,
+            linkLocalIps: linkLocalIps,
+            driverOpts: driverOpts
           })
         : disconnect(network, selected))
       if (ok) onClose()
@@ -112,11 +105,11 @@ export default function ConnectContainerDialog({ network, mode, onClose }: Props
       {mode === 'connect' && (
         <>
           <div className="grid grid-cols-2 gap-3">
-            <TextInput
-              hint="Outros nomes pelos quais o container responde nesta rede. Separe por vírgula."
+            <TagsInput
+              hint="Outros nomes pelos quais o container responde nesta rede."
               label="Aliases na rede"
               placeholder="ex.: api, backend"
-              value={aliases}
+              values={aliases}
               onChange={setAliases}
             />
             <TextInput
@@ -128,26 +121,26 @@ export default function ConnectContainerDialog({ network, mode, onClose }: Props
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <TextInput
-              hint="Ligações a outros containers no formato nome:alias. Separe por vírgula."
+            <TagsInput
+              hint="Ligações a outros containers no formato nome:alias."
               label="Links"
               placeholder="ex.: db:postgres"
-              value={links}
+              values={links}
               onChange={setLinks}
             />
-            <TextInput
-              hint="Endereços IPv4 link-local adicionais. Separe por vírgula."
+            <TagsInput
+              hint="Endereços IPv4 link-local adicionais."
               label="IPs link-local"
               placeholder="ex.: 169.254.10.1"
-              value={linkLocalIps}
+              values={linkLocalIps}
               onChange={setLinkLocalIps}
             />
           </div>
-          <TextInput
-            hint="Opções do driver de endpoint, em pares chave=valor separados por vírgula."
+          <TagsInput
+            hint="Opções do driver de endpoint, em pares chave=valor."
             label="Opções do driver"
             placeholder="ex.: com.docker.network.endpoint.exposedports=80"
-            value={driverOpts}
+            values={driverOpts}
             onChange={setDriverOpts}
           />
         </>

@@ -26,7 +26,7 @@ const CHIP: Record<UpdateState, { label: string; tone: 'default' | 'success' | '
 const formatMoment = (ms: number): string =>
   new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 
-export default function UpdateCard(): React.JSX.Element {
+export default function UpdatesTab(): React.JSX.Element {
   const status = useUpdateStore((s) => s.status)
   const checking = useUpdateStore((s) => s.checking)
   const check = useUpdateStore((s) => s.check)
@@ -39,10 +39,10 @@ export default function UpdateCard(): React.JSX.Element {
   return (
     <Group
       actions={<StateChip label={chip.label} tone={chip.tone} />}
-      className="xl:col-span-2"
+      description="O canal é o das releases estáveis do repositório."
       title="Atualizações"
     >
-      <dl className="grid gap-x-6 sm:grid-cols-2">
+      <dl className="grid gap-x-8 sm:grid-cols-2">
         <Fact label="Versão instalada">
           <Mono>{status?.currentVersion ?? '-'}</Mono>
         </Fact>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeftRight, FileUp, FolderOpen } from 'lucide-react'
 import type { ContainerInfo, CopyDirection } from '@shared/schemas'
-import { AppModal, Button, IconAction, SelectInput, SwitchInput, TextInput } from '@/design'
+import { AppModal, Button, SelectInput, SwitchInput, TextInput } from '@/design'
 import { useContainersStore } from './store'
 
 interface Props {
@@ -104,29 +104,36 @@ export default function CopyFilesDialog({ container, onClose }: Props): React.JS
         onChange={(v) => setDirection(v as CopyDirection)}
       />
 
-      <div className="flex items-end gap-2">
-        <TextInput
-          autoFocus
-          className="flex-1"
-          hint={
-            paraDentro
-              ? 'Arquivo ou pasta do Windows que será enviado.'
-              : 'Onde salvar: uma pasta existente ou o caminho de um arquivo novo, que a CLI cria.'
+      <TextInput
+        autoFocus
+        // Escolher arquivo só faz sentido na direção que ENVIA: saindo do
+        // container, o destino é uma pasta (ou um arquivo que ainda não existe).
+        action={[
+          ...(paraDentro
+            ? [
+                {
+                  label: 'Escolher arquivo',
+                  icon: <FileUp className="size-4" />,
+                  onPress: () => void pickFile()
+                }
+              ]
+            : []),
+          {
+            label: 'Escolher pasta',
+            icon: <FolderOpen className="size-4" />,
+            onPress: () => void pickFolder()
           }
-          label={paraDentro ? 'Origem no Windows' : 'Destino no Windows'}
-          placeholder="ex.: C:\\projeto\\config.yaml"
-          value={hostPath}
-          onChange={setHostPath}
-        />
-        {paraDentro && (
-          <IconAction label="Escolher arquivo" variant="secondary" onPress={() => void pickFile()}>
-            <FileUp className="size-4" />
-          </IconAction>
-        )}
-        <IconAction label="Escolher pasta" variant="secondary" onPress={() => void pickFolder()}>
-          <FolderOpen className="size-4" />
-        </IconAction>
-      </div>
+        ]}
+        hint={
+          paraDentro
+            ? 'Arquivo ou pasta do Windows que será enviado.'
+            : 'Onde salvar: uma pasta existente ou o caminho de um arquivo novo, que a CLI cria.'
+        }
+        label={paraDentro ? 'Origem no Windows' : 'Destino no Windows'}
+        placeholder="ex.: C:\projeto\config.yaml"
+        value={hostPath}
+        onChange={setHostPath}
+      />
 
       <div className="field-row flex items-center justify-center px-4 py-2 text-muted">
         <ArrowLeftRight className="size-4" />

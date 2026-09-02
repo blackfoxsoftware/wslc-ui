@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures/app'
-import { expectToast, goto } from './fixtures/ui'
+import { expectToast, goto, openTab } from './fixtures/ui'
 
 /**
  * Auto-updater na aba Sistema.
@@ -12,12 +12,18 @@ import { expectToast, goto } from './fixtures/ui'
 
 const chip = (page: import('@playwright/test').Page, texto: string) => page.getByText(texto, { exact: true })
 
+/** Sistema aberto na aba Atualizações, que é onde o updater aparece. */
+const abrirAtualizacoes = async (page: import('@playwright/test').Page): Promise<void> => {
+  await goto(page, 'Sistema')
+  await openTab(page, 'Atualizações')
+}
+
 const procurar = (page: import('@playwright/test').Page) =>
   page.getByRole('button', { name: 'Procurar atualizações' })
 
 test.describe('Atualizações · com instalador', () => {
   test('encontra, baixa e fica pronta para instalar ao fechar', async ({ page }) => {
-    await goto(page, 'Sistema')
+    await abrirAtualizacoes(page)
     await expect(chip(page, 'não verificado')).toBeVisible()
 
     await procurar(page).click()
@@ -28,14 +34,14 @@ test.describe('Atualizações · com instalador', () => {
   })
 
   test('mostra as notas da versão nova', async ({ page }) => {
-    await goto(page, 'Sistema')
+    await abrirAtualizacoes(page)
     await procurar(page).click()
 
     await expect(page.getByText('Atualização automática a partir das releases do GitHub')).toBeVisible()
   })
 
   test('instalar encerra o app pelo caminho ordenado', async ({ page }) => {
-    await goto(page, 'Sistema')
+    await abrirAtualizacoes(page)
     await procurar(page).click()
     await page.getByRole('button', { name: 'Reiniciar e instalar agora' }).click()
 
@@ -49,7 +55,7 @@ test.describe('Atualizações · caminho triste', () => {
     test.use({ fail: ['updates:check'] })
 
     test('o erro aparece na própria seção', async ({ page }) => {
-      await goto(page, 'Sistema')
+      await abrirAtualizacoes(page)
       await procurar(page).click()
 
       await expect(chip(page, 'falhou')).toBeVisible()
@@ -63,7 +69,7 @@ test.describe('Atualizações · caminho triste', () => {
     // A versão encontrada continua à vista: é o que permite oferecer o caminho
     // manual quando o automático não deu certo.
     test('mantém a versão encontrada mesmo tendo falhado', async ({ page }) => {
-      await goto(page, 'Sistema')
+      await abrirAtualizacoes(page)
       await procurar(page).click()
 
       await expect(chip(page, 'falhou')).toBeVisible()
@@ -77,7 +83,7 @@ test.describe('Atualizações · portátil', () => {
   test.use({ update: 'portable' })
 
   test('avisa e leva para a release, sem instalar nada', async ({ page }) => {
-    await goto(page, 'Sistema')
+    await abrirAtualizacoes(page)
     await procurar(page).click()
 
     await expect(chip(page, 'versão nova')).toBeVisible()
@@ -87,7 +93,7 @@ test.describe('Atualizações · portátil', () => {
   })
 
   test('o link da release é um efeito externo registrado', async ({ page }) => {
-    await goto(page, 'Sistema')
+    await abrirAtualizacoes(page)
     await procurar(page).click()
     await page.getByRole('button', { name: 'Baixar na release' }).click()
 
@@ -100,7 +106,7 @@ test.describe('Atualizações · rodando do código-fonte', () => {
   test.use({ update: 'disabled' })
 
   test('não oferece o que não pode cumprir', async ({ page }) => {
-    await goto(page, 'Sistema')
+    await abrirAtualizacoes(page)
 
     await expect(procurar(page)).toBeDisabled()
     await expect(page.getByText(/não há instalação para atualizar por cima/)).toBeVisible()

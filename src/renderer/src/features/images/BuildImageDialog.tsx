@@ -1,19 +1,12 @@
 import { useState } from 'react'
 import { FolderOpen } from 'lucide-react'
 import type { BuildImageOptions } from '@shared/schemas'
-import { AppModal, Button, IconAction, SelectInput, SwitchInput, Tabs, TextInput } from '@/design'
+import { AppModal, Button, SelectInput, SwitchInput, Tabs, TagsInput, TextInput } from '@/design'
 import { useStreamStore } from '@/stores/stream-store'
 
 interface Props {
   onClose: () => void
 }
-
-/** Vírgulas separam itens; vazios são descartados. */
-const splitList = (raw: string): string[] =>
-  raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
 
 /**
  * `--progress` da CLI. 'auto' é o padrão e não vai para a linha de comando;
@@ -33,10 +26,10 @@ export default function BuildImageDialog({ onClose }: Props): React.JSX.Element 
   const [context, setContext] = useState('')
   const [file, setFile] = useState('')
   // Avançado
-  const [buildArgs, setBuildArgs] = useState('')
+  const [buildArgs, setBuildArgs] = useState<string[]>([])
   const [target, setTarget] = useState('')
-  const [labels, setLabels] = useState('')
-  const [secrets, setSecrets] = useState('')
+  const [labels, setLabels] = useState<string[]>([])
+  const [secrets, setSecrets] = useState<string[]>([])
   const [output, setOutput] = useState('')
   const [iidfile, setIidfile] = useState('')
   const [progress, setProgress] = useState<BuildImageOptions['progress']>('auto')
@@ -55,14 +48,14 @@ export default function BuildImageDialog({ onClose }: Props): React.JSX.Element 
         tag: tag.trim(),
         context: context.trim(),
         file: file.trim() || undefined,
-        buildArgs: splitList(buildArgs),
+        buildArgs: buildArgs,
         noCache: noCache || undefined,
         target: target.trim() || undefined,
-        secrets: splitList(secrets),
+        secrets: secrets,
         output: output.trim() || undefined,
         progress,
         iidfile: iidfile.trim() || undefined,
-        labels: splitList(labels),
+        labels: labels,
         pull: pull || undefined
       })
     )
@@ -86,11 +79,19 @@ export default function BuildImageDialog({ onClose }: Props): React.JSX.Element 
       title="Build de imagem"
       onClose={onClose}
     >
-      <Tabs className="min-w-0" defaultSelectedKey="general">
-        <Tabs.List>
-          <Tabs.Tab id="general">Geral</Tabs.Tab>
-          <Tabs.Tab id="advanced">Avançado</Tabs.Tab>
-        </Tabs.List>
+      <Tabs className="min-w-0" defaultSelectedKey="general" variant="secondary">
+        <Tabs.ListContainer>
+          <Tabs.List>
+            <Tabs.Tab id="general">
+              Geral
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="advanced">
+              Avançado
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
 
         <Tabs.Panel className="flex flex-col gap-4 pt-4" id="general">
           <TextInput
@@ -100,18 +101,17 @@ export default function BuildImageDialog({ onClose }: Props): React.JSX.Element 
             value={tag}
             onChange={setTag}
           />
-          <div className="flex items-end gap-2">
-            <TextInput
-              className="flex-1"
-              label="Pasta de contexto"
-              placeholder="pasta com o Containerfile"
-              value={context}
-              onChange={setContext}
-            />
-            <IconAction label="Escolher pasta" variant="secondary" onPress={() => void pickFolder()}>
-              <FolderOpen className="size-4" />
-            </IconAction>
-          </div>
+          <TextInput
+            action={{
+              label: 'Escolher pasta',
+              icon: <FolderOpen className="size-4" />,
+              onPress: () => void pickFolder()
+            }}
+            label="Pasta de contexto"
+            placeholder="pasta com o Containerfile"
+            value={context}
+            onChange={setContext}
+          />
           <TextInput
             hint="Opcional: vazio usa o Containerfile padrão da pasta de contexto."
             label="Containerfile"
@@ -119,11 +119,11 @@ export default function BuildImageDialog({ onClose }: Props): React.JSX.Element 
             value={file}
             onChange={setFile}
           />
-          <TextInput
-            hint="Pares CHAVE=VALOR disponíveis nos ARG do Containerfile. Separe por vírgula."
+          <TagsInput
+            hint="Pares CHAVE=VALOR disponíveis nos ARG do Containerfile."
             label="Argumentos de build"
             placeholder="ex.: VERSION=1.2.0, NODE_ENV=production"
-            value={buildArgs}
+            values={buildArgs}
             onChange={setBuildArgs}
           />
           <div className="field-group flex flex-col gap-3 px-4 py-3">
@@ -159,31 +159,32 @@ export default function BuildImageDialog({ onClose }: Props): React.JSX.Element 
               onChange={(v) => setProgress(v as BuildImageOptions['progress'])}
             />
           </div>
-          <TextInput
-            hint="Pares chave=valor gravados como metadados da imagem. Separe por vírgula."
+          <TagsInput
+            hint="Pares chave=valor gravados como metadados da imagem."
             label="Labels"
             placeholder="ex.: app=site, env=dev"
-            value={labels}
+            values={labels}
             onChange={setLabels}
           />
-          <TextInput
-            hint="Segredos expostos ao build sem virar camada: id=NOME[,type=env|file][,env=VAR|,src=CAMINHO]. Separe por vírgula."
+          <TagsInput
+            commaSeparated={false}
+            hint="Segredos expostos ao build sem virar camada: id=NOME[,type=env|file][,env=VAR|,src=CAMINHO]."
             label="Segredos"
-            placeholder="ex.: id=npmrc,src=C:\\Users\\eu\\.npmrc"
-            value={secrets}
+            placeholder="ex.: id=npmrc,src=C:\Users\eu\.npmrc"
+            values={secrets}
             onChange={setSecrets}
           />
           <TextInput
-            hint="Destino no formato do docker buildx, ex.: type=local,dest=C:\\saida ou type=tar,dest=out.tar. Vazio carrega a imagem na sessão."
+            hint="Destino no formato do docker buildx, ex.: type=local,dest=C:\saida ou type=tar,dest=out.tar. Vazio carrega a imagem na sessão."
             label="Saída do build"
-            placeholder="ex.: type=local,dest=C:\\saida"
+            placeholder="ex.: type=local,dest=C:\saida"
             value={output}
             onChange={setOutput}
           />
           <TextInput
             hint="Arquivo onde gravar o ID da imagem construída — útil para scripts que rodam depois."
             label="Arquivo do ID da imagem"
-            placeholder="ex.: C:\\build\\imagem.txt"
+            placeholder="ex.: C:\build\imagem.txt"
             value={iidfile}
             onChange={setIidfile}
           />

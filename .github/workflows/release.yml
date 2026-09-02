@@ -67,9 +67,47 @@ jobs:
     permissions:
       contents: read
 
+  # Empacota ANTES da tag: config de empacotamento quebrada não pode deixar uma
+  # tag publicada sem binário. Se este job falhar, nada foi criado ainda.
+  empacotar:
+    name: Empacotar
+    needs: [preparar, ci]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Garantir o binário do Electron
+        shell: pwsh
+        run: |
+          if (-not (Test-Path node_modules/electron/dist/electron.exe)) {
+            node node_modules/electron/install.js
+          }
+
+      - name: Instalador e portátil
+        run: npm run dist
+
+      # O E2E roda contra out/; só aqui o asar, o koffi desempacotado e a DLL em
+      # resources/ existem para ser testados.
+      - name: Fumaça no app empacotado
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/fumaca-empacotado.ts "dist/win-unpacked/WSLC UI.exe"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: instaladores
+          path: dist/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
   publicar:
     name: Publicar
-    needs: [preparar, ci]
+    needs: [preparar, ci, empacotar]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -84,6 +122,11 @@ jobs:
 
       - name: Gerar as notas
         run: npm run patchnotes -- --notas --saida notas.md
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: instaladores
+          path: dist
 
       - name: Criar a tag anotada
         env:
@@ -103,5 +146,5 @@ jobs:
           extra=()
           # Versão com sufixo (0.2.0-rc.1) sai marcada como pré-lançamento.
           if [[ "$VERSAO" == *-* ]]; then extra+=(--prerelease); fi
-          gh release create "$TAG" --title "$TAG" --notes-file notas.md --verify-tag "${extra[@]}"
+          gh release create "$TAG" --title "$TAG" --notes-file notas.md --verify-tag "${extra[@]}"             dist/*.exe
           echo "[$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG) publicada." >> "$GITHUB_STEP_SUMMARY"

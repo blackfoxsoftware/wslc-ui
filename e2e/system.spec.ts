@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures/app'
-import { confirm, expectToast, fillNumber, openTab, toggleSwitch } from './fixtures/ui'
+import { confirm, expectToast, fillNumber, goto, openTab, toggleSwitch } from './fixtures/ui'
 
 /**
  * Sistema: ambiente, sessões do wslc, escolha do motor e tuning da sessão
@@ -137,8 +137,14 @@ test.describe('Sistema · motor de execução', () => {
     await engineToggle(page, 'Nativo').click()
     await expectToast(page, /Motor alterado/)
 
-    await page.getByRole('link', { name: 'Containers', exact: true }).click()
-    await expect(page.getByText('motor nativo')).toBeVisible()
+    // `goto` e não um clique cru: ele espera o <h1> da view nova. Sem essa
+    // espera a asserção corria contra a view ANTIGA ainda montada — a troca de
+    // tela leva um quadro ou dois desde que passou a ter transição —, e a
+    // matriz de cobertura de Sistema tem 14 rótulos de leitor de tela com
+    // "disponível no motor nativo" dentro. Daí o `exact`: sem ele o texto do
+    // chip é substring de todos eles.
+    await goto(page, 'Containers')
+    await expect(page.getByText('motor nativo', { exact: true })).toBeVisible()
     await expect(page.getByText('Sem containers')).toBeVisible()
   })
 
@@ -173,7 +179,7 @@ test.describe('Sistema · tuning da sessão nativa', () => {
 
     // Sai da view e volta: o valor vem do settings.json, não do estado local
     // — e a aba remonta do zero, porque o React Aria descarta o painel.
-    await page.getByRole('link', { name: 'Containers', exact: true }).click()
+    await goto(page, 'Containers')
     await goToTab(page, 'API nativa')
     await expect(page.getByRole('textbox', { name: 'CPUs' })).toHaveValue('4')
   })

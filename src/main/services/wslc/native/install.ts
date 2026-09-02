@@ -6,7 +6,8 @@ import {
   loadWslcSdk,
   registerCallback,
   unregisterCallback,
-  WSLC_COMPONENT_FLAGS
+  WSLC_COMPONENT_FLAGS,
+  WSLC_INSTALL_OPTIONS
 } from './bindings'
 import { locateWslcSdk } from './locate'
 import { callNative } from './session'
@@ -59,7 +60,18 @@ export async function installNativeComponents(
       onProgress({ component: componentLabel(component), step, total })
     }
     cbId = registerCallback(cb as never, sdk.types['InstallCallback'])
-    const hr = await callNative(sdk.raw['WslcInstallWithDependencies'], cbId, null)
+    // A ABI 2.9.9 pede quais componentes instalar (e opções) antes do callback.
+    // `before` são justamente os que faltam — com 0, a chamada vira no-op, que
+    // é o mesmo comportamento idempotente da 2.9.3 em máquina completa.
+    const hr = sdk.abi.modern
+      ? await callNative(
+          sdk.raw['WslcInstallWithDependencies'],
+          before,
+          WSLC_INSTALL_OPTIONS.NONE,
+          cbId,
+          null
+        )
+      : await callNative(sdk.raw['WslcInstallWithDependencies'], cbId, null)
 
     if (!hrOk(hr)) {
       const message =

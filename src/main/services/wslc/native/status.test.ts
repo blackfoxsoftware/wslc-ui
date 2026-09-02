@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { locateWslcSdk } from './locate'
-import { getNativeStatus, missingComponentNames } from './status'
+import { pickBundledSdk } from './bundled'
+import { getNativeStatus, missingComponentNames, isNativeUsable } from './status'
 
 describe('missingComponentNames', () => {
   it('mapeia os flags para nomes amigáveis', () => {
@@ -12,11 +12,22 @@ describe('missingComponentNames', () => {
 
 // Integração real com a wslcsdk.dll — roda apenas onde a DLL existir
 // (vendorizada no repo, então normalmente roda).
-describe.skipIf(locateWslcSdk() === null)('wslcsdk via FFI (integração)', () => {
+describe.skipIf(!isNativeUsable())('wslcsdk via FFI (integração)', () => {
   it('carrega a DLL, inicializa COM e lê versão/componentes', () => {
     const status = getNativeStatus()
     expect(status.available).toBe(true)
-    expect(status.sdkVersion).toMatch(/^\d+\.\d+\.\d+$/)
+    // É a versão do WSL instalado, não a da DLL — ver nativeStatusSchema.
+    expect(status.wslVersion).toMatch(/^\d+\.\d+\.\d+$/)
     expect(status.dllPath).toContain('wslcsdk.dll')
+    expect(status.sizeBytes).toBeGreaterThan(0)
+  })
+
+  // O app leva duas DLLs e escolhe pela versão do WSL (ver bundled.ts). O teste
+  // não fixa qual: fixa a REGRA, para valer em qualquer máquina.
+  it('usa a DLL empacotada compatível com o WSL desta máquina', () => {
+    const status = getNativeStatus()
+    const esperada = pickBundledSdk(status.wslVersion)
+    expect(status.dllPath).toContain(esperada.version)
+    expect(status.abi).toBe(esperada.version === '2.9.9' ? '2.9.9+' : '2.9.3')
   })
 })

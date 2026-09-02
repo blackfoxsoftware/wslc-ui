@@ -1,0 +1,67 @@
+appId: com.blackfoxsoftware.wslc-ui
+productName: WSLC UI
+copyright: © 2026 Rafael de Souza Sell
+
+directories:
+  output: dist
+  buildResources: build
+
+# O padrão do electron-builder já é "tudo menos o óbvio"; aqui só tiramos o que
+# é de desenvolvimento. `vendor` sai porque as DLLs entram por extraResources —
+# incluí-las nos dois lugares custaria 10 MB à toa.
+files:
+  - '!.github/**'
+  - '!e2e/**'
+  - '!scripts/**'
+  - '!src/**'
+  - '!vendor/**'
+  - '!coverage/**'
+  - '!test-results/**'
+  - '!playwright-report/**'
+  - '!{electron.vite.config.ts,playwright.config.ts,vitest.config.ts}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,tsconfig.e2e.json}'
+  - '!{.oxlintrc.json,.oxfmtrc.jsonc,skills-lock.json,patchnotes.json}'
+  - '!{README.md,ROADMAP.md,CONTRIBUTING.md,SECURITY.md,CODE_OF_CONDUCT.md}'
+
+# koffi carrega um .node por dlopen: dentro do asar ele não existe como arquivo
+# de verdade, e o require falha em tempo de execução.
+asarUnpack:
+  - '**/node_modules/koffi/**'
+
+# As duas wslcsdk.dll vão para resources/, de onde o locate as procura no app
+# instalado (process.resourcesPath). LICENSE e NOTICE acompanham porque o
+# pacote é MIT: redistribuir exige carregar os avisos junto.
+extraResources:
+  - from: vendor/wslcsdk/win-x64
+    to: vendor/wslcsdk/win-x64
+  - from: vendor/wslcsdk/LICENSE.txt
+    to: vendor/wslcsdk/LICENSE.txt
+  - from: vendor/wslcsdk/NOTICE.txt
+    to: vendor/wslcsdk/NOTICE.txt
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  # Sem certificado: o SmartScreen vai avisar "editor desconhecido". Assinar
+  # depois não exige refazer nada aqui além de apontar o .pfx.
+  signAndEditExecutable: true
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WSLC UI
+  artifactName: ${name}-${version}-setup.${ext}
+  uninstallDisplayName: WSLC UI ${version}
+
+portable:
+  artifactName: ${name}-${version}-portable.${ext}
+
+# Não publica sozinho: quem cria a release é o workflow, a partir da tag.
+publish: null

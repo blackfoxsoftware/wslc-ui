@@ -11,6 +11,7 @@ import type {
   NativeTuning,
   RegistryImage,
   RunContainerOptions,
+  SdkProbe,
   VhdVolumeOptions,
   VolumeInfo
 } from '@shared/schemas'
@@ -45,8 +46,14 @@ export interface NativeOps {
   setTuning(tuning: NativeTuning): void
   setOnSessionEnded(cb: (reason: NativeSessionEndedEvent['reason']) => void): void
   setOnCrashDump(cb: (ev: NativeCrashDumpEvent) => void): void
-  /** Sonda a DLL: presença, versão e componentes faltando (não exige sessão). */
+  /** Sonda a DLL: presença, origem, ABI e componentes faltando (não exige sessão). */
   status(): NativeStatus
+  /** Caminho da DLL escolhida na aba Sistema (null = a empacotada com o app). */
+  getSdkPath(): string | null
+  /** Passa a usar outra DLL. Só vale de fato na próxima abertura do app. */
+  setSdkPath(path: string | null): void
+  /** Lê versão, ABI e SHA-256 de uma DLL candidata, sem adotá-la. */
+  probeSdk(path: string): SdkProbe
   /** Instalação guiada dos componentes (só precisa da DLL, não da sessão). */
   install(onProgress: (ev: InstallProgressEvent) => void): Promise<CommandResult>
 

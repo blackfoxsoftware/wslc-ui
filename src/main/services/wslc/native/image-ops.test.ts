@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { StreamDataEvent, StreamExitEvent, StreamProgressEvent } from '@shared/schemas'
 import { stopStream, type StreamSink } from '../streams'
 import { importNativeImage, pullNativeImage, pushNativeImage, tagNativeImage } from './image-ops'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import { listNativeImages, releaseNativeSession, removeNativeImage } from './session'
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -46,7 +46,7 @@ async function hasImage(name: string): Promise<boolean> {
 
 // Integração real: pull com progresso estruturado, tag e import de tarball na
 // sessão nativa (exige a wslcsdk.dll e rede para o Docker Hub).
-describe.skipIf(locateWslcSdk() === null)('imagens nativas (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('imagens nativas (integração real via FFI)', () => {
   beforeAll(async () => {
     // Sobra de execução anterior invalidaria o teste de cancelamento.
     await removeNativeImage('busybox:latest').catch(() => null)

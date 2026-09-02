@@ -1,6 +1,28 @@
 {
   "versoes": [
     {
+      "versao": "0.2.0",
+      "data": "2026-09-01",
+      "titulo": "O app agora tem instalador, e leva o SDK do WSL consigo.",
+      "mudancas": {
+        "adicionado": [
+          "Instalador (NSIS) e versão portátil para Windows x64, publicados como assets da release. Não são assinados: o SmartScreen avisa 'editor desconhecido'.",
+          "A wslcsdk.dll vai empacotada com o app — duas versões, 2.9.3 e 2.9.9, com a escolha feita em tempo de execução pela versão do WSL instalado.",
+          "Seletor de wslcsdk.dll na aba Sistema, para apontar uma DLL própria. O arquivo é sondado antes de ser aceito: versão, ABI e SHA-256 são lidos na hora, e o que não serve é recusado ali.",
+          "A aba Sistema passa a mostrar a origem da DLL em uso (empacotada, escolhida, do WSL ou de variável de ambiente), a ABI detectada e o tamanho do binário.",
+          "Ícone próprio do app."
+        ],
+        "alterado": [
+          "Containers nativos SOBREVIVEM ao fechamento do app quando o SDK é 2.9.9+: eles param e são reabertos por nome na execução seguinte, em vez de serem apagados na saída.",
+          "O campo que a aba Sistema chamava de 'SDK' virou 'WSL (pelo SDK)': medindo, WslcGetVersion devolve a versão do WSL instalado, não a da DLL — binários diferentes respondem o mesmo número.",
+          "O app ficou ~100 MB menor: tudo o que só o renderer usa saiu de dependencies, onde viajava duas vezes (embutido no bundle e de novo em node_modules)."
+        ],
+        "corrigido": [
+          "Login em registry e instalação guiada não corrompem mais a chamada quando a DLL é 2.9.9: as duas funções mudaram de assinatura sem mudar o header de forma detectável, e o app agora identifica a ABI e se adapta."
+        ]
+      }
+    },
+    {
       "versao": "0.1.0",
       "data": "2026-09-01",
       "titulo": "Primeira versão pública: a superfície do wslc 2.9.4 inteira, nos dois motores.",

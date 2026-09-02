@@ -102,10 +102,32 @@ UI: o app já mostra o ID e tem terminal próprio). Detalhes na regra 18 do ROAD
 
 ## Motor nativo (wslcsdk via FFI)
 
-Além da CLI, o app carrega a **API C nativa** (`wslcsdk.dll`, vendorizada do NuGet
-`Microsoft.WSL.Containers` em `vendor/wslcsdk/`) via **koffi**: toda a superfície do header está
-vinculada em `src/main/services/wslc/native/bindings.ts`, e a view Sistema mostra o status do SDK
-(versão, DLL, componentes faltando).
+Além da CLI, o app carrega a **API C nativa** (`wslcsdk.dll`, do NuGet `Microsoft.WSL.Containers`)
+via **koffi**: toda a superfície do header está vinculada em
+`src/main/services/wslc/native/bindings.ts`, e a view Sistema mostra o status do SDK.
+
+### A DLL vem junto — e são duas
+
+O app **empacota** o SDK (`vendor/wslcsdk/`, licença MIT da Microsoft) e escolhe qual usar em tempo
+de execução, porque a versão do SDK precisa **casar** com a do WSL instalado. Isso foi medido nesta
+máquina, nas duas direções:
+
+|           | WSL 2.9.4                                        | WSL 2.9.9                                         |
+| --------- | ------------------------------------------------ | ------------------------------------------------- |
+| SDK 2.9.3 | funciona                                         | `WSLC_E_SDK_UPDATE_NEEDED` já no `WslcGetVersion` |
+| SDK 2.9.9 | **segfault** em `WslcGetSessionTerminationEvent` | funciona                                          |
+
+SDK novo demais é o caso perigoso: **nada no header denuncia** — a declaração da função que quebra é
+byte a byte idêntica nas duas versões, e os 18 structs também. Não há binding que se defenda; o
+processo simplesmente morre. Daí a regra em `native/bundled.ts`: usar a DLL mais nova que **não
+passe** da versão do WSL. Quem quiser outra escolhe o arquivo na aba **Sistema** — o app sonda a DLL
+(carrega, lê, descarrega) antes de aceitar, e a troca vale ao reabrir, porque a sessão viva segura
+handles da atual.
+
+A 2.9.9 também mudou **duas assinaturas** sem mudar nada visível (`WslcSessionAuthenticate` ganhou
+`tokenType`; `WslcInstallWithDependencies` ganhou `components` e `options`), o que corromperia login
+em registry e instalação guiada em silêncio. O `bindings.ts` detecta a ABI pela presença do símbolo
+`WslcOpenContainer` e adapta as chamadas.
 
 **Fases 1 a 7 (roadmap completo + cobertura 100%):** toggle **Motor: CLI / Nativo** em Sistema
 (persistido em `settings.json`). No motor nativo o app mantém uma sessão própria (`WslcUi`,
@@ -276,6 +298,7 @@ npm test               # vitest (test:watch, test:coverage)
 npm run test:e2e       # build + Playwright contra o app Electron (e2e/)
 npm run check          # typecheck + lint + format:check + test + patchnotes
 npm run patchnotes     # valida o patchnotes.json (--notas gera as notas da release)
+npm run dist           # instalador NSIS + portátil em dist/ (electron-builder)
 npm run cenario:nativo # povoa a sessão nativa com o cenário de teste (app fechado)
 ```
 
@@ -486,8 +509,15 @@ Publicar uma versão é **subir o `version` do `package.json` e escrever as nota
 3. roda o CI inteiro no estado da `main` que vai virar tag;
 4. cria a tag anotada `v<versao>` e publica a release com o corpo gerado do `patchnotes.json`.
 
-Versão com sufixo (`0.2.0-rc.1`) sai marcada como pré-lançamento. A release leva as notas e a tag,
-sem instalador: a `wslcsdk.dll` da Microsoft não é redistribuída aqui (ver [Licença](#licença)).
+Entre o passo 3 e o 4 o workflow **empacota** (instalador NSIS e portátil) e roda um teste de fumaça
+que abre o `.exe` de verdade — asar, koffi desempacotado e DLL em `resources/` são três coisas que só
+existem no app empacotado e que o E2E, rodando contra `out/`, nunca tocaria. Empacotar antes de criar
+a tag é de propósito: uma config quebrada não pode deixar uma tag publicada sem binário.
+
+Os dois `.exe` sobem como assets da release. **Não são assinados**: o SmartScreen vai avisar "editor
+desconhecido" e exigir _Mais informações → Executar assim mesmo_.
+
+Versão com sufixo (`0.2.0-rc.1`) sai marcada como pré-lançamento.
 
 ## Licença
 
@@ -495,8 +525,9 @@ Código deste repositório: **MIT** — ver [LICENSE](LICENSE).
 
 ### Componentes de terceiros
 
-- **`Microsoft.WSL.Containers`** (`wslcsdk.dll` / `wslcsdk.h`) — SDK da Microsoft, em preview, sob a
-  licença do próprio pacote NuGet. **Não é redistribuído aqui**; baixe conforme
+- **`Microsoft.WSL.Containers`** (`wslcsdk.dll`) — SDK da Microsoft, em preview, sob licença **MIT**
+  (© Microsoft Corporation). É **redistribuído aqui**, no repositório e dentro do instalador, com
+  `LICENSE.txt` e `NOTICE.txt` do próprio pacote — ver
   [`vendor/wslcsdk/README.md`](vendor/wslcsdk/README.md).
 - **`wslc.exe`** — parte do WSL, distribuída pela Microsoft. Este projeto apenas o consome; não o
   inclui nem o modifica.

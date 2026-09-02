@@ -74,10 +74,16 @@ function makeHandlers(overrides: Partial<InvokeHandlers> = {}): InvokeHandlers {
     'system:native-status': async () => ({
       available: false,
       dllPath: null,
-      sdkVersion: null,
+      source: null,
+      wslVersion: null,
+      abi: null,
+      sizeBytes: null,
       missingComponents: [],
       detail: 'teste'
     }),
+    'system:sdk-path': async () => null,
+    'system:pick-sdk': async () => null,
+    'system:set-sdk-path': () => undefined,
     'system:get-engine': async () => ({ engine: 'cli' as const, sessionActive: false, detail: 'teste' }),
     'system:set-engine': async () => ({ engine: 'cli' as const, sessionActive: false, detail: 'teste' }),
     'system:reset-native': async () => okResult,

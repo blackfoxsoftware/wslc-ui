@@ -13,6 +13,7 @@ import {
   type WslcSdk
 } from './bindings'
 import { formatUnixDate } from './images'
+import { forgetContainer, readKnownContainers, rememberContainer, type KnownContainer } from './known'
 import { formatPortsDisplay, mapNativeState, parsePortSpec, parseVolumeSpec } from './run-spec'
 import {
   acquireNativeSession,
@@ -25,11 +26,17 @@ import {
 /**
  * Containers nativos (Fase 2 do ROADMAP).
  *
- * O SDK preview NÃO tem enumeração nem "abrir por ID" — um container só é
- * gerenciável pelo handle criado neste processo. Por isso o app mantém um
- * registro em memória e REMOVE os containers nativos ao fechar (senão viram
- * órfãos permanentes: os registros sobrevivem até ao terminate da sessão e
- * só somem apagando o storage — ver resetNativeSession).
+ * O SDK não enumera containers em nenhuma versão, então o app mantém um
+ * registro EM MEMÓRIA dos que criou. O que muda com a ABI 2.9.9 é o resgate:
+ * `WslcOpenContainer` abre um container por nome ou ID, inclusive um criado
+ * por outra execução do app. Com ele, os containers passam a SOBREVIVER ao
+ * fechamento — o app lembra os nomes em disco (known.ts) e reabre na próxima
+ * subida, em vez de apagar tudo na saída.
+ *
+ * Na ABI 2.9.3 o comportamento antigo continua, e por necessidade: sem abrir
+ * por ID, um container deixado para trás vira órfão permanente (o registro
+ * sobrevive ao terminate da sessão e só some apagando o storage — ver
+ * resetNativeSession), então ali a saída do app apaga mesmo.
  *
  * Regras por probe (SDK 2.9.4): port mapping exige networking BRIDGED e só
  * TCP; init process com callbacks exige start com WSLC_CONTAINER_START_FLAG_ATTACH.
@@ -309,6 +316,7 @@ export async function runNativeContainer(opts: RunContainerOptions): Promise<Com
     }
 
     registry.set(record.id, record)
+    rememberContainer(toKnown(record))
     logInfo(
       'native',
       `Container ${record.id.slice(0, 12)} (${record.name}) criado e iniciado — ${record.image}`,
@@ -331,8 +339,77 @@ export async function runNativeContainer(opts: RunContainerOptions): Promise<Com
   }
 }
 
+function toKnown(c: NativeContainer): KnownContainer {
+  return {
+    id: c.id,
+    name: c.name,
+    image: c.image,
+    command: c.command,
+    createdAt: c.createdAt,
+    portsDisplay: c.portsDisplay,
+    autoRemove: c.autoRemove
+  }
+}
+
+/** Registro para um container REABERTO: sem logs e sem callbacks anteriores. */
+function fromKnown(sdk: WslcSdk, handle: unknown, k: KnownContainer): NativeContainer {
+  return {
+    sdk,
+    handle,
+    id: k.id,
+    name: k.name,
+    image: k.image,
+    command: k.command,
+    createdAt: k.createdAt,
+    portsDisplay: k.portsDisplay,
+    autoRemove: k.autoRemove,
+    // Keep vazio: os buffers do create pertenciam ao processo que morreu; este
+    // handle veio pronto do SDK e não referencia nada nosso.
+    keep: new Keep(),
+    callbackIds: [],
+    // Os logs ficaram no processo anterior. O SDK não os guarda, e inventar
+    // um histórico vazio é honesto: a UI mostra o container sem log até que
+    // ele rode de novo.
+    logs: '',
+    logListeners: new Set(),
+    exitListeners: new Set(),
+    exitCode: null
+  }
+}
+
+/**
+ * Reabre os containers lembrados que não estão no registro desta execução.
+ *
+ * Só existe na ABI 2.9.9+ (WslcOpenContainer). O que não abrir mais — removido
+ * por fora, storage resetado — é esquecido, senão a lista cresceria para sempre
+ * com fantasmas.
+ */
+async function reopenKnownContainers(): Promise<void> {
+  const known = readKnownContainers()
+  if (known.length === 0) return
+
+  const { sdk, handle: session } = await acquireNativeSession()
+  if (!sdk.abi.modern) return
+
+  for (const k of known) {
+    if (registry.has(k.id)) continue
+    const out: unknown[] = [null]
+    const err: (string | null)[] = [null]
+    const keep = new Keep()
+    // oxlint-disable-next-line no-await-in-loop -- sequencial de propósito (handles nativos)
+    const hr = await callNative(sdk.raw['WslcOpenContainer'], session, keep.ansi(k.id), out, err)
+    if (!hrOk(hr) || !out[0]) {
+      forgetContainer(k.id)
+      continue
+    }
+    registry.set(k.id, fromKnown(sdk, out[0], k))
+    logInfo('native', `Container ${k.id.slice(0, 12)} (${k.name}) reaberto de uma execução anterior`)
+  }
+}
+
 /** Lista os containers do registro com estado real (WslcGetContainerState). */
 export async function listNativeContainers(all: boolean): Promise<ContainerInfo[]> {
+  await reopenKnownContainers()
   const result: ContainerInfo[] = []
   const newestFirst = Array.from(registry.values()).toSorted((a, b) => b.createdAt - a.createdAt)
   // oxlint-disable-next-line no-await-in-loop -- sequencial de propósito (handles nativos)
@@ -344,7 +421,8 @@ export async function listNativeContainers(all: boolean): Promise<ContainerInfo[
     const hr = await callNative(c.sdk.raw['WslcGetContainerState'], c.handle, stateOut)
     const raw = hrOk(hr) ? stateOut[0] : 0
     if (raw === 4) {
-      // DELETED (ex.: auto-remove) — sai do registro.
+      // DELETED (ex.: auto-remove) — sai do registro e da memória em disco.
+      forgetContainer(c.id)
       void releaseLocal(c)
       continue
     }
@@ -405,6 +483,7 @@ export async function nativeContainerAction(action: ContainerAction, id: string)
       const err: (string | null)[] = [null]
       const hr = await callNative(raw['WslcDeleteContainer'], c.handle, DELETE_FORCE, err)
       if (!hrOk(hr)) return failResult('WslcDeleteContainer', hr, err[0])
+      forgetContainer(c.id)
       await releaseLocal(c)
       return { ok: true, code: 0, stdout: '', stderr: '' }
     }
@@ -595,10 +674,27 @@ export function streamNativeLogs(id: string, sink: StreamSink): number {
   return streamId
 }
 
-/** Remove (FORCE) todos os containers do app — chamado ao fechar (sem isso viram órfãos). */
+/**
+ * Fechamento do app. O que acontece aqui depende da ABI:
+ *
+ * - **2.9.9+**: os containers FICAM. `WslcOpenContainer` os traz de volta na
+ *   próxima execução (ver reopenKnownContainers), então apagá-los seria jogar
+ *   fora trabalho da pessoa. Soltar a sessão os derruba para EXITED; um start
+ *   depois os traz de volta.
+ * - **2.9.3**: apaga, como sempre. Sem abrir por ID, um container deixado para
+ *   trás vira órfão permanente no storage — invisível e não gerenciável.
+ */
 export async function cleanupNativeContainers(): Promise<void> {
   const all = [...registry.values()]
   if (all.length === 0) return
+
+  const primeiro = all[0] as NativeContainer
+  if (primeiro.sdk.abi.modern) {
+    logInfo('native', `Mantendo ${all.length} container(s) nativo(s) — serão reabertos na próxima execução`)
+    await Promise.allSettled(all.map((c) => releaseLocal(c)))
+    return
+  }
+
   logInfo('native', `Removendo ${all.length} container(s) nativo(s) no fechamento do app`)
   let cap: NodeJS.Timeout | undefined
   await Promise.race([
@@ -625,6 +721,8 @@ export async function resetNativeSession(): Promise<CommandResult> {
     logWarn('native', 'Reset da sessão nativa solicitado (terminate + wipe do storage)')
     await Promise.allSettled(Array.from(registry.values()).map((c) => releaseLocal(c)))
     await terminateNativeSession()
+    // Apaga o storage inteiro: containers.json mora lá dentro, então a
+    // memória dos containers vai junto, que é o esperado num reset.
     const storage = sessionStoragePath()
     rmSync(storage, { recursive: true, force: true })
     mkdirSync(storage, { recursive: true })

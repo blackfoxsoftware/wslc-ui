@@ -376,8 +376,10 @@ export default function SystemView(): React.JSX.Element {
             pull e push com progresso por camada, login em registry, tag, load/import de tarball, remover) e
             volumes VHDX (tamanho, tipo e dono) usam a sessão própria do app (&quot;WslcUi&quot;) via FFI.
             Crashes de processos nos containers geram um aviso com o caminho do dump (.dmp) coletado pelo WSL.
-            Como o SDK preview não permite reabrir handles, os containers nativos são removidos quando o app
-            fecha. Build, save, export, stats e redes nomeadas só existem no motor CLI.
+            A partir da ABI 2.9.9 os containers nativos SOBREVIVEM ao fechamento do app: eles param, e o app
+            os reabre pelo nome na próxima execução. Na 2.9.3 eles ainda são removidos na saída, porque sem
+            reabrir por ID virariam registros órfãos e invisíveis. Build, save, export, stats e redes nomeadas
+            só existem no motor CLI.
           </p>
 
           <section className="mt-5 flex flex-col gap-4 border-t border-separator pt-5">

@@ -29,7 +29,8 @@ import type { HostOps, NativeOps, Ops, StreamOps } from './ops'
  *
  * A sessão nativa aqui imita as regras REAIS que a UI observa: ela tem
  * storage próprio (as listas não são as mesmas do motor CLI), reiniciar
- * mantém as imagens e perde os containers, e resetar perde os dois.
+ * mantém as imagens e derruba os containers para exited (a ABI 2.9.9 os
+ * reabre), e resetar perde os dois.
  */
 
 const ok = (stdout = ''): CommandResult => ({ ok: true, code: 0, stdout, stderr: '' })
@@ -246,13 +247,18 @@ const nativeOps: NativeOps = {
     if (shouldFail('system:restart-native')) {
       return failure('system:restart-native', 'Falha ao reiniciar a sessão nativa.')
     }
-    // Reiniciar perde os containers e MANTÉM as imagens (regra do SDK real).
-    world.containers = []
+    // Com a ABI 2.9.9 os containers NÃO se perdem: soltar a sessão os derruba
+    // para exited, e o app os reabre por nome (WslcOpenContainer). As imagens
+    // ficam, como sempre. Medido no SDK real.
+    for (const c of world.containers) {
+      Object.assign(c, { state: 'exited', status: 'Exited (0) agora' })
+    }
     world.active = true
     return ok('Sessão nativa reiniciada com as novas configurações (as imagens foram mantidas).')
   },
   cleanupContainers: async () => {
-    world.containers = []
+    // Fechar o app não apaga mais nada na ABI 2.9.9 — os containers são
+    // reabertos na execução seguinte.
   },
   setTuning: (tuning) => {
     world.tuning = tuning

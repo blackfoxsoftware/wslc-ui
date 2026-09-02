@@ -74,7 +74,8 @@ test.describe('Sistema · motor de execução', () => {
 
     await expect(page.getByText('disponível', { exact: true })).toBeVisible()
     await expect(page.getByText('0.9.0')).toBeVisible()
-    await expect(page.getByText(/wslcsdk\.dll/)).toBeVisible()
+    // Específico: "wslcsdk.dll" sozinho casa também com o título da seção da DLL.
+    await expect(page.getByText(/demo.*wslcsdk\.dll/)).toBeVisible()
   })
 
   test('troca da CLI para o nativo e volta', async ({ page }) => {
@@ -253,6 +254,67 @@ test.describe('Sistema · caminhos tristes', () => {
 
       await expect(page.getByText('Sem sessões ativas')).toBeVisible()
       await expect(page.getByText('2.9.3.0')).toBeVisible()
+    })
+  })
+})
+
+test.describe('Sistema · escolha da wslcsdk.dll', () => {
+  test('mostra a DLL empacotada, com origem e ABI', async ({ page }) => {
+    await goToSystem(page)
+
+    await expect(page.getByText('empacotada com o app')).toBeVisible()
+    await expect(page.getByText('2.9.9+', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Escolher outra DLL/ })).toBeVisible()
+    // Sem escolha própria, não há o que desfazer.
+    await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeHidden()
+  })
+
+  test.describe('escolhendo uma DLL válida', () => {
+    test.use({ pick: 'D:\\baixado\\wslcsdk.dll' })
+
+    test('sonda, aceita e avisa que vale ao reabrir', async ({ page }) => {
+      await goToSystem(page)
+      await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
+
+      await expectToast(page, /2\.9\.9\+ escolhida.*[Rr]eabra/)
+      await expect(page.getByText('D:\\baixado\\wslcsdk.dll')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeVisible()
+    })
+
+    test('voltar para a empacotada limpa a escolha', async ({ page }) => {
+      await goToSystem(page)
+      await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
+      await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeVisible()
+
+      await page.getByRole('button', { name: 'Usar a empacotada' }).click()
+      await expectToast(page, /Voltando para a DLL empacotada/)
+      await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeHidden()
+    })
+  })
+
+  // O ponto do seletor: recusar ANTES de gravar. Sem isso, o erro só apareceria
+  // na próxima abertura do app, com o motor nativo fora do ar e sem pista.
+  test.describe('escolhendo um arquivo que não serve', () => {
+    test.use({ pick: 'C:\\Downloads\\leia-me.txt' })
+
+    test('recusa e não grava a escolha', async ({ page }) => {
+      await goToSystem(page)
+      await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
+
+      await expectToast(page, /Não é uma wslcsdk.dll utilizável/)
+      await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeHidden()
+    })
+  })
+
+  test.describe('cancelando o diálogo', () => {
+    test.use({ pick: 'cancel' })
+
+    test('não muda nada', async ({ page }) => {
+      await goToSystem(page)
+      await page.getByRole('button', { name: /Escolher outra DLL/ }).click()
+
+      await expect(page.getByText('empacotada com o app')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Usar a empacotada' })).toBeHidden()
     })
   })
 })

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import type { TerminalDataEvent, TerminalExitEvent } from '@shared/schemas'
 import { closeTerminal, writeTerminal } from '../terminals'
 import { cleanupNativeContainers, runNativeContainer } from './containers'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import { releaseNativeSession } from './session'
 import { openNativeTerminal } from './terminal'
 
@@ -32,7 +32,7 @@ function memorySink(): MemorySink {
 
 // Integração real: shell persistente via bridge FIFO dentro de um container
 // nativo (exige a wslcsdk.dll e a imagem alpine:latest na sessão nativa).
-describe.skipIf(locateWslcSdk() === null)('terminal nativo (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('terminal nativo (integração real via FFI)', () => {
   afterAll(async () => {
     await cleanupNativeContainers()
     releaseNativeSession()

@@ -8,7 +8,7 @@ import {
   runNativeContainer
 } from './containers'
 import { mapCrashDump, signalName } from './crash-dumps'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import { releaseNativeSession, setOnNativeCrashDump } from './session'
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -52,7 +52,7 @@ describe('mapCrashDump (puro)', () => {
 
 // Integração real: crash de um processo dentro de um container da sessão
 // nativa (exige a wslcsdk.dll e a imagem alpine:latest já puxada).
-describe.skipIf(locateWslcSdk() === null)('crash dumps (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('crash dumps (integração real via FFI)', () => {
   afterAll(async () => {
     setOnNativeCrashDump(() => {})
     await cleanupNativeContainers()

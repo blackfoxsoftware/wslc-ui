@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { imageSchema } from '@shared/schemas'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import {
   ensureNativeSession,
   isNativeSessionActive,
@@ -25,7 +25,7 @@ describe('sessionStoragePath', () => {
 
 // Integração real: roda apenas nas máquinas com a wslcsdk.dll (cria/solta a
 // sessão "WslcUi" de verdade — a mesma que o app usa).
-describe.skipIf(locateWslcSdk() === null)('sessão nativa (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('sessão nativa (integração real via FFI)', () => {
   afterAll(() => {
     releaseNativeSession()
   })

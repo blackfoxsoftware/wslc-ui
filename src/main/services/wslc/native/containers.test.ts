@@ -11,7 +11,7 @@ import {
   runNativeContainer,
   streamNativeLogs
 } from './containers'
-import { locateWslcSdk } from './locate'
+import { isNativeUsable } from './status'
 import { acquireNativeSession, releaseNativeSession, setNativeSessionTuning } from './session'
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -39,7 +39,7 @@ const removerTodos = async (): Promise<void> => {
 
 // Integração real: cria containers de verdade na sessão "WslcUi" (exige a
 // wslcsdk.dll e a imagem alpine:latest já puxada para a sessão nativa).
-describe.skipIf(locateWslcSdk() === null)('containers nativos (integração real via FFI)', () => {
+describe.skipIf(!isNativeUsable())('containers nativos (integração real via FFI)', () => {
   beforeAll(removerTodos, 60_000)
 
   afterAll(async () => {

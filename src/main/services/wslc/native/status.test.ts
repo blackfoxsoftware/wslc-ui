@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { pickBundledSdk } from './bundled'
-import { locateWslcSdk } from './locate'
-import { getNativeStatus, missingComponentNames } from './status'
+import { getNativeStatus, missingComponentNames, isNativeUsable } from './status'
 
 describe('missingComponentNames', () => {
   it('mapeia os flags para nomes amigáveis', () => {
@@ -13,7 +12,7 @@ describe('missingComponentNames', () => {
 
 // Integração real com a wslcsdk.dll — roda apenas onde a DLL existir
 // (vendorizada no repo, então normalmente roda).
-describe.skipIf(locateWslcSdk() === null)('wslcsdk via FFI (integração)', () => {
+describe.skipIf(!isNativeUsable())('wslcsdk via FFI (integração)', () => {
   it('carrega a DLL, inicializa COM e lê versão/componentes', () => {
     const status = getNativeStatus()
     expect(status.available).toBe(true)

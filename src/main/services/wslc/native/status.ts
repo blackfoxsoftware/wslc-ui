@@ -84,3 +84,16 @@ export function getNativeStatus(): NativeStatus {
     }
   }
 }
+
+/**
+ * O motor nativo é utilizável NESTA máquina? Guarda dos testes de integração.
+ *
+ * Era `locateWslcSdk() === null`, e funcionava por acidente: a DLL não era
+ * versionada, então no CI ela não existia e a suíte pulava. Ao empacotar o SDK
+ * no repositório, o arquivo passou a existir em qualquer runner — mas o WSL
+ * não. Presença de arquivo nunca foi a pergunta certa; a pergunta é se o SDK
+ * responde, e é isso que `available` mede (carrega a DLL e pede a versão).
+ */
+export function isNativeUsable(): boolean {
+  return getNativeStatus().available
+}

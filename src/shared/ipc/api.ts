@@ -23,6 +23,7 @@ import type {
   StreamProgressEvent,
   TerminalDataEvent,
   TerminalExitEvent,
+  UpdateStatus,
   VhdVolumeOptions,
   VolumeInfo,
   WindowStateEvent,
@@ -123,6 +124,14 @@ export interface WslcApi {
   /** Diálogo nativo de salvar arquivo. */
   pickSaveFile(title: string, defaultName: string, extensions: string[]): Promise<string | null>
   openExternal(url: string): Promise<void>
+  /** Estado do auto-updater (não dispara rede). */
+  updateStatus(): Promise<UpdateStatus>
+  /** Procura atualização agora; resolve com o estado já atualizado. */
+  checkForUpdates(): Promise<UpdateStatus>
+  /** Fecha o app e aplica a atualização baixada (só no modo instalador). */
+  installUpdate(): Promise<void>
+  /** Cada transição do updater: checou, achou, baixou, falhou. */
+  onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
   streamLogs(id: string): Promise<number>
   pullImage(ref: string): Promise<number>
   stopStream(streamId: number): Promise<void>

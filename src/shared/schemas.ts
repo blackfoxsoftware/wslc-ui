@@ -223,6 +223,49 @@ export const sdkProbeSchema = z.object({
   detail: z.string()
 })
 
+/**
+ * Como este app consegue (ou não) se atualizar sozinho.
+ *
+ * 'installer' — instalado pelo setup: baixa e aplica a atualização ao fechar.
+ * 'portable'  — o .exe portátil não se instala: o app só avisa e leva para a
+ *               release. Trocar o arquivo é de quem usa, que é o ponto de ser
+ *               portátil.
+ * 'disabled'  — rodando do código-fonte (electron-vite): não há release para
+ *               comparar, e sobrescrever `out/` seria destruir o repositório.
+ */
+export const updateModeSchema = z.enum(['installer', 'portable', 'disabled'])
+
+export const updateStateSchema = z.enum([
+  'idle',
+  'checking',
+  'up-to-date',
+  'available',
+  'downloading',
+  'downloaded',
+  'error'
+])
+
+/** Estado do auto-updater, como a aba Sistema o mostra. */
+export const updateStatusSchema = z.object({
+  mode: updateModeSchema,
+  state: updateStateSchema,
+  currentVersion: z.string(),
+  /** Versão nova encontrada; null enquanto não houver. */
+  newVersion: z.string().nullable(),
+  /** 0–100 durante o download. */
+  percent: z.number().nullable(),
+  /** Corpo da release (as notas do patchnotes.json), quando o GitHub o manda. */
+  releaseNotes: z.string().nullable(),
+  /** Página da release nova — para onde o portátil manda quem quer atualizar. */
+  releaseUrl: z.string().nullable(),
+  /** epoch ms da última checagem concluída; null se nunca checou. */
+  checkedAt: z.number().nullable(),
+  /** Mensagem do último erro, ao lado do estado que sobreviveu a ele. */
+  error: z.string().nullable(),
+  /** Por que o updater está desligado (só quando mode é 'disabled'). */
+  reason: z.string().nullable()
+})
+
 /** Motor de execução: CLI (wslc.exe) ou API nativa (wslcsdk.dll via FFI). */
 export const engineSchema = z.enum(['cli', 'native'])
 
@@ -335,7 +378,16 @@ export const terminalExitEventSchema = z.object({
 
 export const logLevelSchema = z.enum(['debug', 'info', 'warn', 'error'])
 
-export const logCategorySchema = z.enum(['app', 'ipc', 'cli', 'native', 'engine', 'stream', 'terminal'])
+export const logCategorySchema = z.enum([
+  'app',
+  'ipc',
+  'cli',
+  'native',
+  'engine',
+  'stream',
+  'terminal',
+  'update'
+])
 
 /** Uma entrada do sistema de logs do app (processo main). */
 export const logEntrySchema = z.object({
@@ -385,3 +437,6 @@ export type EngineStatus = z.infer<typeof engineStatusSchema>
 export type NativeSessionEndedEvent = z.infer<typeof nativeSessionEndedEventSchema>
 export type NativeCrashDumpEvent = z.infer<typeof nativeCrashDumpEventSchema>
 export type InstallProgressEvent = z.infer<typeof installProgressEventSchema>
+export type UpdateMode = z.infer<typeof updateModeSchema>
+export type UpdateState = z.infer<typeof updateStateSchema>
+export type UpdateStatus = z.infer<typeof updateStatusSchema>

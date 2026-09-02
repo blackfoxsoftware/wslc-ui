@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CommandResult, WslcEnvironment } from '@shared/schemas'
+import type { CommandResult, UpdateStatus, WslcEnvironment } from '@shared/schemas'
 import { invokeChannels } from '@shared/ipc/contract'
 
 const handleMock = vi.fn()
@@ -15,6 +15,18 @@ vi.mock('electron', () => ({
 import { registerInvokeHandlers, unregisterInvokeHandlers, type InvokeHandlers } from './router'
 
 const okResult: CommandResult = { ok: true, code: 0, stdout: '', stderr: '' }
+const updateFixture: UpdateStatus = {
+  mode: 'installer',
+  state: 'idle',
+  currentVersion: '0.0.0',
+  newVersion: null,
+  percent: null,
+  releaseNotes: null,
+  releaseUrl: null,
+  checkedAt: null,
+  error: null,
+  reason: null
+}
 const envFixture: WslcEnvironment = {
   wslInstalled: true,
   wslVersion: '2.9.3.0',
@@ -93,6 +105,9 @@ function makeHandlers(overrides: Partial<InvokeHandlers> = {}): InvokeHandlers {
     'system:open-external': () => undefined,
     'system:install-wslc': async () => okResult,
     'system:show-item': () => undefined,
+    'updates:status': () => updateFixture,
+    'updates:check': async () => updateFixture,
+    'updates:install': async () => undefined,
     'streams:stop': () => undefined,
     'terminal:open': async () => 5,
     'terminal:write': () => undefined,

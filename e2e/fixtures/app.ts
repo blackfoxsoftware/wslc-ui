@@ -33,6 +33,8 @@ export interface AppOptions {
   fail: string[]
   /** Caminho devolvido pelos diálogos de arquivo; 'cancel' simula cancelar. */
   pick: string | undefined
+  /** Modo do auto-updater simulado — ver WSLC_UI_MOCK_UPDATE em mock-state.ts. */
+  update: 'installer' | 'portable' | 'disabled'
 }
 
 interface AppFixtures {
@@ -53,8 +55,9 @@ export const test = base.extend<AppOptions & AppFixtures>({
   engine: ['cli', { option: true }],
   fail: [[], { option: true }],
   pick: [undefined, { option: true }],
+  update: ['installer', { option: true }],
 
-  app: async ({ mock, engine, fail, pick }, use) => {
+  app: async ({ mock, engine, fail, pick, update }, use) => {
     const userData = mkdtempSync(join(tmpdir(), 'wslc-ui-e2e-'))
     // O motor é lido do settings.json na primeira consulta: semear o arquivo
     // faz o app JÁ ABRIR no motor pedido, sem passar pela tela de Sistema.
@@ -68,6 +71,7 @@ export const test = base.extend<AppOptions & AppFixtures>({
         WSLC_UI_MOCK: mock,
         WSLC_UI_MOCK_FAIL: fail.join(','),
         WSLC_UI_MOCK_TICK_MS: '40',
+        WSLC_UI_MOCK_UPDATE: update,
         ...(pick === undefined ? {} : { WSLC_UI_MOCK_PICK: pick })
       })
     })

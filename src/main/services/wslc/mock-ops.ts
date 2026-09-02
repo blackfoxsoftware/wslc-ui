@@ -15,7 +15,9 @@ import type {
   VhdVolumeOptions,
   VolumeInfo
 } from '@shared/schemas'
+import { app } from 'electron'
 import { logInfo } from '../logger'
+import { createMockUpdateOps } from '../updater/mock'
 import { currentMockWorld } from './mock'
 import { failHard, failure, markEnvironmentInstalled, pickedPath, shouldFail, tickMs } from './mock-state'
 import { allocStreamId, registerStream, releaseStream, type StreamSink } from './streams'
@@ -644,5 +646,10 @@ const hostOps: HostOps = {
 }
 
 export function createMockOps(): Ops {
-  return { native: nativeOps, stream: streamOps, host: hostOps }
+  return {
+    native: nativeOps,
+    stream: streamOps,
+    host: hostOps,
+    update: createMockUpdateOps(app.getVersion())
+  }
 }

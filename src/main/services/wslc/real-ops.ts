@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { dialog, shell } from 'electron'
 import { searchDockerHub } from '../registry'
+import { createUpdateOps } from '../updater'
 import { WSLC } from './cli'
 import {
   cleanupNativeContainers,
@@ -159,5 +160,5 @@ const hostOps: HostOps = {
 }
 
 export function createRealOps(): Ops {
-  return { native: nativeOps, stream: streamOps, host: hostOps }
+  return { native: nativeOps, stream: streamOps, host: hostOps, update: createUpdateOps() }
 }

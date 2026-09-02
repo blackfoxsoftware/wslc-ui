@@ -26,6 +26,8 @@ import { confirmDialog } from '@/stores/confirm-store'
 import { useEngineStore } from '@/stores/engine-store'
 import { useEnvStore } from '@/stores/env-store'
 import { useNativeStore } from '@/stores/native-store'
+import { Fact } from './Fact'
+import UpdateCard from './UpdateCard'
 
 /** Rótulo de onde a DLL em uso saiu (nativeStatus.source). */
 const SDK_SOURCES: Record<NonNullable<NativeStatus['source']>, string> = {
@@ -96,16 +98,6 @@ const resetWslcSettings = async (): Promise<void> => {
 const parseField = (raw: string): number | undefined => {
   const n = Number.parseInt(raw, 10)
   return Number.isInteger(n) && n > 0 ? n : undefined
-}
-
-/** Linha de dado do bloco de ambiente: rótulo à esquerda, valor à direita. */
-function Fact({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
-  return (
-    <div className="flex items-baseline gap-4 border-b border-separator py-2 last:border-b-0">
-      <dt className="w-36 shrink-0 text-xs text-muted">{label}</dt>
-      <dd className="min-w-0 flex-1 text-sm">{children}</dd>
-    </div>
-  )
 }
 
 export default function SystemView(): React.JSX.Element {
@@ -312,6 +304,8 @@ export default function SystemView(): React.JSX.Element {
             </Row>
           ))}
         </DataTable>
+
+        <UpdateCard />
 
         <Group
           actions={

@@ -98,10 +98,21 @@ jobs:
       - name: Fumaça no app empacotado
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/fumaca-empacotado.ts "dist/win-unpacked/WSLC UI.exe"
 
+      # O latest.yml é o índice que o auto-updater lê para descobrir que existe
+      # versão nova. Sem ele a release sai completa aos olhos de quem baixa na
+      # mão, e invisível para quem já tem o app instalado — erro que só apareceria
+      # uma versão depois. Por isso a checagem é aqui, e é dura.
+      - name: Conferir o índice do auto-updater
+        shell: bash
+        run: test -f dist/latest.yml || { echo '::error::latest.yml não foi gerado'; exit 1; }
+
       - uses: actions/upload-artifact@v7
         with:
           name: instaladores
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/*.blockmap
+            dist/latest.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -146,5 +157,9 @@ jobs:
           extra=()
           # Versão com sufixo (0.2.0-rc.1) sai marcada como pré-lançamento.
           if [[ "$VERSAO" == *-* ]]; then extra+=(--prerelease); fi
-          gh release create "$TAG" --title "$TAG" --notes-file notas.md --verify-tag "${extra[@]}"             dist/*.exe
+          # O .blockmap é opcional (só o NSIS gera): sem ele o updater baixa o
+          # instalador inteiro em vez do diff. O latest.yml não é opcional.
+          shopt -s nullglob
+          anexos=(dist/*.exe dist/*.blockmap dist/latest.yml)
+          gh release create "$TAG" --title "$TAG" --notes-file notas.md --verify-tag "${extra[@]}" "${anexos[@]}"
           echo "[$TAG](https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG) publicada." >> "$GITHUB_STEP_SUMMARY"

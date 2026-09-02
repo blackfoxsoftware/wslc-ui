@@ -11,7 +11,9 @@ import {
   menuAction,
   modal,
   row,
-  sheet
+  sheet,
+  toasts,
+  toggleSwitch
 } from './fixtures/ui'
 
 /**
@@ -185,6 +187,23 @@ test.describe('Imagens · só no motor CLI', () => {
     await expectToast(page, /Imagem "nginx:latest" salva em/)
   })
 
+  /**
+   * Imagem usada por um container só sai com -f. Em vez de mais um item de
+   * menu perigoso, a saída forçada é um botão no aviso da falha — quem clica
+   * já leu o motivo.
+   */
+  test('remover imagem em uso oferece forçar no próprio aviso', async ({ page }) => {
+    await menuAction(page, 'Ações da imagem', 'Remover', row(page, 'nginx'))
+    await confirm(page, 'Remover')
+
+    await expectToast(page, /está em uso pelo contêiner "web"/)
+    await expect(row(page, 'nginx')).toBeVisible()
+
+    await toasts(page).getByRole('button', { name: 'Remover mesmo assim' }).first().click()
+    await expectToast(page, 'Imagem "nginx:latest" removida.')
+    await expect(page.getByRole('row').filter({ hasText: 'nginx' })).toHaveCount(0)
+  })
+
   test('remove as imagens sem uso', async ({ page }) => {
     await menuAction(page, 'Mais ações', 'Remover imagens sem uso')
     await confirm(page, 'Remover sem uso')
@@ -203,6 +222,29 @@ test.describe('Imagens · só no motor CLI', () => {
     await dialog.getByRole('button', { name: 'Iniciar build' }).click()
     await expect(page.getByText(/Build de meu-app:latest/).first()).toBeVisible()
     await expect(page.getByText(/PASSO 3\/3/)).toBeVisible()
+    await expectStreamFinished(page, 0)
+  })
+
+  /**
+   * As opções do build (a 2.9.8 trocou o motor por `docker buildx build`).
+   * O dublê ecoa `--no-cache` e `--target` na saída: é o que prova que elas
+   * chegaram à linha de comando, e não pararam no formulário.
+   */
+  test('o build avançado leva --no-cache e --target até a CLI', async ({ page }) => {
+    await page.getByRole('button', { name: 'Construir imagem a partir de um Containerfile' }).click()
+    const dialog = modal(page)
+
+    await fillField(dialog, 'Tag da imagem', 'app:multi')
+    await dialog.getByRole('button', { name: 'Escolher pasta' }).click()
+    await fillField(dialog, 'Argumentos de build', 'VERSION=1.2.0')
+    await toggleSwitch(dialog, 'Ignorar o cache')
+
+    await dialog.getByRole('tab', { name: 'Avançado' }).click()
+    await fillField(dialog, 'Estágio alvo', 'builder')
+
+    await dialog.getByRole('button', { name: 'Iniciar build' }).click()
+    await expect(page.getByText(/FROM alpine:latest \(sem cache\)/)).toBeVisible()
+    await expect(page.getByText(/COPY \. \/app até builder/)).toBeVisible()
     await expectStreamFinished(page, 0)
   })
 })

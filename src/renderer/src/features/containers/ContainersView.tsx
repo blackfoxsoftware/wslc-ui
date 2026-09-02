@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Container as ContainerIcon,
+  Copy,
   EllipsisVertical,
   Eraser,
   ExternalLink,
@@ -14,6 +15,7 @@ import {
   RotateCcw,
   ScrollText,
   Skull,
+  SlidersHorizontal,
   Square,
   SquareTerminal,
   Trash2
@@ -47,6 +49,9 @@ import { useEngineStore } from '@/stores/engine-store'
 import { statsFor, useStatsStore } from '@/stores/stats-store'
 import { useStreamStore } from '@/stores/stream-store'
 import ContainerDetailsSheet from './ContainerDetailsSheet'
+import CopyFilesDialog from './CopyFilesDialog'
+import { LOG_PADRAO, logStreamTitle } from './logs'
+import LogsOptionsDialog from './LogsOptionsDialog'
 import RunDialog from './RunDialog'
 import TerminalSheet from './TerminalSheet'
 import { useContainersStore } from './store'
@@ -82,6 +87,21 @@ export default function ContainersView(): React.JSX.Element {
   const [showRun, setShowRun] = useState(false)
   const [details, setDetails] = useState<ContainerInfo | null>(null)
   const [terminal, setTerminal] = useState<ContainerInfo | null>(null)
+  const [copying, setCopying] = useState<ContainerInfo | null>(null)
+  const [logOptions, setLogOptions] = useState<ContainerInfo | null>(null)
+
+  /**
+   * Abre o painel de logs. No motor CLI com a cauda padrão (senão a CLI
+   * despeja o log inteiro); no nativo sem opção nenhuma, porque o SDK entrega
+   * o log por callback desde o começo — e o título não pode prometer recorte.
+   */
+  const openLogs = (c: ContainerInfo): void => {
+    const label = c.name || c.id.slice(0, 12)
+    const opts = nativeEngine ? undefined : LOG_PADRAO
+    void openStream(nativeEngine ? `Logs de ${label}` : logStreamTitle(label, opts), () =>
+      window.wslcApi.streamLogs(c.id || c.name, opts)
+    )
+  }
 
   usePolling(refresh, 5000, showAll)
   usePolling(refreshStats, 3000)
@@ -99,7 +119,10 @@ export default function ContainersView(): React.JSX.Element {
     const label = c.name || c.id.slice(0, 12)
     const ok = await confirmDialog({
       title: `Remover o container "${label}"?`,
-      description: 'Essa ação não pode ser desfeita.',
+      description:
+        c.state === 'running'
+          ? 'O container está em execução: a remoção falha, e o aviso oferece removê-lo assim mesmo.'
+          : 'Essa ação não pode ser desfeita.',
       confirmLabel: 'Remover',
       destructive: true
     })
@@ -293,14 +316,7 @@ export default function ContainersView(): React.JSX.Element {
                         <Play className="size-4" />
                       </IconAction>
                     )}
-                    <IconAction
-                      label="Logs"
-                      onPress={() =>
-                        void openStream(`Logs de ${c.name || c.id.slice(0, 12)}`, () =>
-                          window.wslcApi.streamLogs(c.id || c.name)
-                        )
-                      }
-                    >
+                    <IconAction label="Logs" onPress={() => openLogs(c)}>
                       <ScrollText className="size-4" />
                     </IconAction>
                     {c.state === 'running' && (
@@ -318,6 +334,18 @@ export default function ContainersView(): React.JSX.Element {
                             <Info className="size-4" />
                             <Label>Detalhes</Label>
                           </Dropdown.Item>
+                          {!nativeEngine && (
+                            // Cauda, carimbo de hora e recorte por data são da
+                            // CLI: no nativo o log vem inteiro por callback.
+                            <Dropdown.Item
+                              id="logs-options"
+                              textValue="Logs com opções"
+                              onAction={() => setLogOptions(c)}
+                            >
+                              <SlidersHorizontal className="size-4" />
+                              <Label>Logs com opções…</Label>
+                            </Dropdown.Item>
+                          )}
                           <Dropdown.Item
                             id="restart"
                             isDisabled={c.state !== 'running' || busyId === c.id}
@@ -335,6 +363,18 @@ export default function ContainersView(): React.JSX.Element {
                             >
                               <ExternalLink className="size-4" />
                               <Label>Terminal externo</Label>
+                            </Dropdown.Item>
+                          )}
+                          {!nativeEngine && (
+                            // `container cp` não tem equivalente no SDK nativo.
+                            <Dropdown.Item
+                              id="copy"
+                              isDisabled={busyId === c.id}
+                              textValue="Copiar arquivos"
+                              onAction={() => setCopying(c)}
+                            >
+                              <Copy className="size-4" />
+                              <Label>Copiar arquivos…</Label>
                             </Dropdown.Item>
                           )}
                           {!nativeEngine && (
@@ -393,6 +433,10 @@ export default function ContainersView(): React.JSX.Element {
       )}
 
       {details && <ContainerDetailsSheet container={details} onClose={() => setDetails(null)} />}
+
+      {copying && <CopyFilesDialog container={copying} onClose={() => setCopying(null)} />}
+
+      {logOptions && <LogsOptionsDialog container={logOptions} onClose={() => setLogOptions(null)} />}
 
       {terminal && <TerminalSheet container={terminal} onClose={() => setTerminal(null)} />}
     </PageShell>

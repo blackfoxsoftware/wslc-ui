@@ -1,4 +1,5 @@
 import type { RunContainerOptions } from '@shared/schemas'
+import { pushEach, pushOpt } from './args'
 
 /** Divide um comando respeitando aspas simples/duplas. */
 export function splitCommand(command: string): string[] {
@@ -11,20 +12,11 @@ export function splitCommand(command: string): string[] {
   return parts
 }
 
-/** Empurra `flag valor` quando o valor não está vazio. */
-function pushOpt(args: string[], flag: string, value: string | undefined): void {
-  if (value?.trim()) args.push(flag, value.trim())
-}
-
-/** Empurra `flag item` para cada item não vazio. */
-function pushEach(args: string[], flag: string, values: string[] | undefined): void {
-  for (const v of values ?? []) if (v.trim()) args.push(flag, v.trim())
-}
-
 /** Monta a linha de argumentos de `wslc run` a partir das opções do diálogo. */
 export function buildRunArgs(opts: RunContainerOptions): string[] {
-  const args = ['run']
-  if (opts.detach) args.push('-d')
+  // `container create` cria parado: não aceita -d (não há o que desanexar).
+  const args = opts.createOnly ? ['container', 'create'] : ['run']
+  if (opts.detach && !opts.createOnly) args.push('-d')
   if (opts.rm) args.push('--rm')
   pushOpt(args, '--name', opts.name)
   pushEach(args, '-p', opts.ports)
@@ -41,6 +33,10 @@ export function buildRunArgs(opts: RunContainerOptions): string[] {
   pushOpt(args, '--entrypoint', opts.entrypoint)
   pushOpt(args, '--network', opts.network)
   pushEach(args, '--network-alias', opts.networkAliases)
+  pushOpt(args, '--ip', opts.ip)
+  pushEach(args, '--mount', opts.mounts)
+  // 'missing' é o padrão da CLI — só vale passar quando muda o comportamento.
+  if (opts.pull && opts.pull !== 'missing') args.push('--pull', opts.pull)
   pushEach(args, '--dns', opts.dns)
   pushEach(args, '--dns-search', opts.dnsSearch)
   pushEach(args, '--dns-option', opts.dnsOptions)

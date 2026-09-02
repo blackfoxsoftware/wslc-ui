@@ -1,6 +1,40 @@
 {
   "versoes": [
     {
+      "versao": "0.3.1",
+      "data": "2026-09-02",
+      "titulo": "Acerto com a CLI 2.9.9 — o que ela mudou, e o que ela ganhou.",
+      "mudancas": {
+        "corrigido": [
+          "A view Redes voltou a abrir. A wslc 2.9.9 passou a devolver um objeto JSON por linha em vez de uma lista, e o app quebrava com “Unexpected non-whitespace character after JSON” ao carregar a tela.",
+          "As colunas de CPU e memória voltaram a aparecer no motor CLI: além do formato novo, o `stats` da 2.9.9 deixou de aceitar a opção que o app usava como alternativa, então a lista chegava sempre vazia, sem erro nenhum.",
+          "A coluna Portas volta a mostrar o endereço publicado (127.0.0.1:8080->80/tcp), e o status do container volta a dizer há quanto tempo ele está parado ou rodando.",
+          "As três limpezas — remover containers parados, imagens sem uso e volumes sem uso — voltaram a funcionar no motor CLI. A 2.9.9 não aceita mais a opção que o app passava, então o comando era recusado antes de começar; e a de imagens e volumes agora limpa tudo o que está sem uso, e não só o que estava pendente ou anônimo.",
+          "As redes bridge, host e none não oferecem mais a ação de remover. A CLI 2.9.9 passou a listá-las junto com as suas, e elas são predefinidas — tentar remover só dava erro."
+        ],
+        "adicionado": [
+          "Copiar arquivos entre o Windows e um container, nos dois sentidos: novo item “Copiar arquivos…” no menu do container. É um comando que a wslc ganhou na versão 2.9.8 e que o app ainda não tinha.",
+          "Logs com recorte: o botão de logs agora abre nas últimas 500 linhas em vez de despejar o log inteiro desde o começo, e o item “Logs com opções…” escolhe quantas linhas, se mostra a hora de cada uma e a partir de (ou até) quando.",
+          "Remover container em execução ou imagem em uso deixou de ser um beco sem saída: quando a CLI recusa, o próprio aviso traz o botão “Remover mesmo assim”.",
+          "O diálogo de build ganhou uma aba Avançado: argumentos de build, ignorar o cache, atualizar a imagem base, estágio alvo, segredos, destino da saída, arquivo do ID e formato do progresso.",
+          "Conectar um container a uma rede agora aceita apelidos, IP fixo, links, IPs link-local e opções do driver — as cinco opções que a CLI 2.9.8 acrescentou.",
+          "Criar rede ganhou a faixa de IPs automáticos, para deixar parte da sub-rede livre para endereços fixos.",
+          "“Criar sem iniciar” no diálogo de executar: prepara o container com toda a configuração e deixa parado, para iniciar quando quiser.",
+          "Executar container ganhou IP fixo na rede, montagens detalhadas (com opções que o campo simples não tem, como somente leitura) e a política de busca da imagem no registry.",
+          "O comando rápido dos detalhes ganhou opções: diretório de trabalho, usuário, variáveis, arquivo de variáveis e rodar em segundo plano.",
+          "Parar container passou a aceitar sinal e tempo de espera, nos dois motores.",
+          "Volumes criados pelo motor CLI aceitam rótulos (pares chave=valor), que aparecem na inspeção.",
+          "Volumes VHDX também no motor CLI: o diálogo de criar volume ganhou a escolha do driver (guest ou vhd), com tamanho, tipo e dono — recurso que a CLI 2.9.9 trouxe e antes só existia no motor nativo."
+        ],
+        "alterado": [
+          "Imagens, volumes, redes e a versão da CLI passaram a ser lidos em JSON em vez da tabela de texto, que vem traduzida e muda de cabeçalho conforme o idioma do Windows. A tabela continua como plano B para CLIs mais antigas.",
+          "Erros do motor nativo agora dizem o que aconteceu. Antes a tela mostrava só o código (“0x80040610”) quando o SDK não mandava mensagem; os 16 códigos do WSL passaram a ter texto em português.",
+          "Remover todos os containers, imagens ou volumes de uma vez ficou mais confiável: a remoção em massa não falha mais quando um item já saiu da lista no meio do caminho.",
+          "Quando o motor nativo está ativo, as ações que só existem na CLI (copiar arquivos, build, exportar, recortar logs, rótulos de volume, usuário do comando rápido) somem da tela em vez de falharem depois de clicadas."
+        ]
+      }
+    },
+    {
       "versao": "0.3.0",
       "data": "2026-09-02",
       "titulo": "O app passa a se atualizar sozinho a partir das releases.",

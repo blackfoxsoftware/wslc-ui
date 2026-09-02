@@ -73,32 +73,87 @@ estrelas e o selo de imagem oficial.
 
 ## Cobertura da CLI wslc
 
-| Recurso                                                                                                                                                                                                                 | Onde                                                                                         |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `run` (**todos os flags**: portas/-P, env/--env-file, volumes/tmpfs, GPU, --rm, -d, rede+aliases, hostname/domínio, DNS, user, entrypoint, workdir, labels, cpus/memory/shm, ulimits, healthcheck, stop-signal/timeout) | Diálogo “Executar container” em 5 abas                                                       |
-| `container list` / `stats` (`--format json`)                                                                                                                                                                            | Lista + colunas CPU/Memória ao vivo (JSON, imune a locale; fallback p/ tabela)               |
-| `container inspect` / `image inspect` / `volume inspect`                                                                                                                                                                | Drawer de detalhes / menu da imagem / botão da view Volumes                                  |
-| `exec`                                                                                                                                                                                                                  | Comando rápido no drawer + **terminal embutido** (xterm.js) + terminal externo               |
-| `container logs --follow` / `image pull` / `push` / `build`                                                                                                                                                             | Painel de saída em streaming                                                                 |
-| `build -t <tag> <contexto>`                                                                                                                                                                                             | Diálogo “Build” com seletor de pasta                                                         |
-| `tag`                                                                                                                                                                                                                   | Menu da imagem → “Nova tag…”                                                                 |
-| `image save` / `load` / `import`                                                                                                                                                                                        | Menu da imagem → “Salvar como .tar…”; menu “mais ações” → carregar/importar                  |
-| `container export`                                                                                                                                                                                                      | Menu do container → “Exportar filesystem (.tar)…” (**só parado** — a CLI recusa em execução) |
-| `container kill`                                                                                                                                                                                                        | Menu do container → “Encerrar (SIGKILL)” com confirmação                                     |
-| `login` / `logout` (`--password-stdin`)                                                                                                                                                                                 | Menu “mais ações” de Imagens → “Login/Logout de registry…”                                   |
-| `start` / `stop` / `rm` / `prune`                                                                                                                                                                                       | Ações por linha + menu “mais ações”                                                          |
-| `restart`                                                                                                                                                                                                               | **Emulado** com stop + start (a CLI não tem restart)                                         |
-| `volume create/list/rm/prune`                                                                                                                                                                                           | View Volumes + aba Volumes do run                                                            |
-| `network create/list/inspect/remove/prune/connect/disconnect`                                                                                                                                                           | **View Redes** (prune com confirmação na UI — a CLI apaga direto!)                           |
-| `system session terminate` / `list`                                                                                                                                                                                     | View Sistema (encerrar + tabela de sessões ativas)                                           |
-| `settings` / `settings reset`                                                                                                                                                                                           | View Sistema → abrir settings.yaml no editor / redefinir                                     |
-| Portas publicadas                                                                                                                                                                                                       | Botão “abrir no navegador” (localhost:porta)                                                 |
+| Recurso                                                                                                                                                                                                                                      | Onde                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `run` (**todos os flags**: portas/-P, env/--env-file, volumes/tmpfs/--mount, GPU, --rm, -d, rede+aliases+--ip, --pull, hostname/domínio, DNS, user, entrypoint, workdir, labels, cpus/memory/shm, ulimits, healthcheck, stop-signal/timeout) | Diálogo “Executar container” em 5 abas                                                                                         |
+| `container create`                                                                                                                                                                                                                           | Chave “Criar sem iniciar” no mesmo diálogo (nasce parado, como no docker)                                                      |
+| `container list` / `image list` / `volume list` / `network list` / `stats` / `version` (`--format json`)                                                                                                                                     | Listas e colunas CPU/Memória ao vivo (JSON, imune a locale; fallback p/ tabela)                                                |
+| `container inspect` / `image inspect` / `volume inspect`                                                                                                                                                                                     | Drawer de detalhes / menu da imagem / botão da view Volumes                                                                    |
+| `exec` (`-u`, `-w`, `-e`, `--env-file`, `-d`)                                                                                                                                                                                                | Comando rápido no drawer (opções atrás do botão “Opções do exec”) + **terminal embutido** (xterm.js) + terminal externo        |
+| `container logs` (`--follow`, `-n`, `-t`, `--since`, `--until`) / `image pull` / `push` / `build`                                                                                                                                            | Painel de saída em streaming; o botão abre com cauda, e “Logs com opções…” escolhe o recorte                                   |
+| `image build` (`-t`, `-f`, `--build-arg`, `--no-cache`, `--target`, `--secret`, `-o`, `--progress`, `--iidfile`, `-l`, `--pull`)                                                                                                             | Diálogo “Build” em duas abas, com seletor de pasta                                                                             |
+| `container cp [-a]`                                                                                                                                                                                                                          | Menu do container → “Copiar arquivos…” (host ↔ container; **entrando, o destino é uma pasta existente** — a wslc não renomeia) |
+| `tag`                                                                                                                                                                                                                                        | Menu da imagem → “Nova tag…”                                                                                                   |
+| `image save` / `load` / `import`                                                                                                                                                                                                             | Menu da imagem → “Salvar como .tar…”; menu “mais ações” → carregar/importar                                                    |
+| `container export`                                                                                                                                                                                                                           | Menu do container → “Exportar filesystem (.tar)…” (**só parado** — a CLI recusa em execução)                                   |
+| `container kill`                                                                                                                                                                                                                             | Menu do container → “Encerrar (SIGKILL)” com confirmação                                                                       |
+| `login` / `logout` (`--password-stdin`)                                                                                                                                                                                                      | Menu “mais ações” de Imagens → “Login/Logout de registry…”                                                                     |
+| `start` / `stop` (`-s`, `-t`) / `rm` (`-f`, `-v`) / `prune`                                                                                                                                                                                  | Ações por linha + menu “mais ações”; a remoção forçada é um botão no aviso da falha                                            |
+| `image rm` (`-f`, `--no-prune`)                                                                                                                                                                                                              | Menu da imagem → “Remover”; forçar aparece no aviso quando a imagem está em uso                                                |
+| `restart`                                                                                                                                                                                                                                    | **Emulado** com stop + start (a CLI não tem restart)                                                                           |
+| `volume create/list/rm/prune` (incl. `-d vhd -o SizeBytes/Fixed/Uid/Gid` e `-l`)                                                                                                                                                             | View Volumes + aba Volumes do run (VHD nos **dois** motores desde a CLI 2.9.9)                                                 |
+| `network create` (incl. `--ip-range`) `/list/inspect/remove/prune/disconnect`                                                                                                                                                                | **View Redes** (prune com confirmação na UI — a CLI apaga direto!)                                                             |
+| `network connect` (`--network-alias`, `--ip`, `--link`, `--link-local-ip`, `--driver-opt`)                                                                                                                                                   | Diálogo “Conectar container” (as opções chegaram na CLI 2.9.8)                                                                 |
+| `system session terminate` / `list`                                                                                                                                                                                                          | View Sistema (encerrar + tabela de sessões ativas)                                                                             |
+| `settings` / `settings reset`                                                                                                                                                                                                                | View Sistema → abrir settings.yaml no editor / redefinir                                                                       |
+| Portas publicadas                                                                                                                                                                                                                            | Botão “abrir no navegador” (localhost:porta)                                                                                   |
 
-**Cobertura 100%** (auditoria + fechamento em 01/09/2026). Fora da UI, por decisão documentada:
-`system session enter/run/shell` (fluxo interativo de terminal — `run`/`shell` só funcionam
-dentro de um `enter`, que anexa a um storage de sessão existente), `container attach`
-(substituído de propósito por `exec -i sh -i`) e `--cidfile`/`-i`/`-t` do run (sem sentido numa
-UI: o app já mostra o ID e tem terminal próprio). Detalhes na regra 18 do ROADMAP.
+**Cobertura 100%** (auditada contra a árvore de `--help` da CLI 2.9.9 em 02/09/2026). Fora da UI,
+por decisão documentada: `system session enter/run/shell` (fluxo interativo de terminal —
+`run`/`shell` só funcionam dentro de um `enter`, que anexa a um storage de sessão existente),
+`container attach` (substituído de propósito por `exec -i sh -i`), `--cidfile`/`-i`/`-t` do run
+(sem sentido numa UI: o app já mostra o ID e tem terminal próprio), o `-` do `container cp` (a
+origem por stdin: um diálogo não tem stdin para oferecer) e o `-f/--filter` das listagens (a UI
+já filtra do lado dela, sobre a lista que tem em mãos). Detalhes nas regras 18 a 20 do ROADMAP.
+
+O que é **só do motor CLI** — porque o SDK nativo não tem equivalente — some da tela quando o
+motor nativo está ativo, em vez de falhar depois de clicado: `container cp` (não há nenhuma API de
+cópia entre as 62 do header), `image build`, `image save`, `container export` e as opções de
+recorte do `container logs` (no SDK o log chega inteiro por callback). Já `container stop -s/-t` e
+o `-w`/`-e` do exec valem nos dois: o SDK recebe sinal, espera, diretório de trabalho e
+variáveis.
+
+### O `--format json` da CLI muda de forma entre versões
+
+A CLI é instalada pelo Windows Update, não por nós — o app não escolhe qual versão vai encontrar, e
+o formato do `--format json` **já mudou uma vez**:
+
+| CLI   | Saída de `network list --format json`                   |
+| ----- | ------------------------------------------------------- |
+| 2.9.4 | um array JSON, com o campo `Id`                         |
+| 2.9.9 | **NDJSON** — um objeto por linha, sem array, campo `ID` |
+
+Um `JSON.parse` da saída inteira morre na segunda linha
+(`Unexpected non-whitespace character after JSON at position N`), e foi exatamente assim que a view
+Redes quebrou. Por isso nenhum ponto do código chama `JSON.parse` na saída da CLI direto: tudo passa
+por `parseJsonLines` (`services/wslc/json-lines.ts`), que aceita as duas formas, e por `jsonList`,
+que devolve `null` quando a CLI recusa a opção — sinal para cair no parser de tabela.
+
+A lição vale para os testes: os fixtures de `real.test.ts` são **capturas literais** da saída da
+2.9.9, não JSON escrito à mão. O teste antigo de redes usava um array inventado, que aquela versão
+nunca devolveu — por isso a mudança passou batida até aparecer na tela de quem usa.
+
+Outras diferenças medidas na 2.9.9: `stats --no-stream` **deixou de existir** (era o nosso fallback,
+e passá-lo hoje é erro de uso); `container list` ganhou `StateChangedAt` (é dele que sai o
+“Encerrado há 6 horas”); `stats` ganhou `PIDs`; `image list`, `volume list` e `version` ganharam
+`--format json`; e `volume create` ganhou `-d/-o/-l`, com o driver `vhd` aceitando as mesmas opções
+do SDK nativo.
+
+### Quando a wslc muda, ela muda para ficar igual ao docker
+
+As duas releases entre a 2.9.4 e a 2.9.9 são, quase inteiras, PRs de **paridade com o docker**: o
+[#41160](https://github.com/microsoft/WSL/pull/41160) alinhou o parser de argumentos (é de onde saiu
+o sumiço do `--force` nos prunes), o [#41070](https://github.com/microsoft/WSL/pull/41070) deu ao
+`network connect` os cinco flags do docker, o [#40835](https://github.com/microsoft/WSL/pull/40835)
+trouxe o `container cp` inteiro e o [#41133](https://github.com/microsoft/WSL/pull/41133) trocou o
+build por `docker buildx build`. Na dúvida sobre um formato ou uma flag, **o comportamento do docker
+é o melhor palpite** — e vale conferir a release note (`gh release view <versão> --repo
+microsoft/WSL`) antes de medir na mão.
+
+Onde a wslc **não** é igual ao docker, e a diferença custa caro: o `-n` do `container logs` (o
+docker usa `--tail`), o `-t` do `container stop` (que ali é `--time`), o `-f` de `volume rm` e
+`network rm` (que é idempotência, "não erre se não existir", e **não** remoção forçada) e o `-f` do
+`network prune` (que é `--filter`).
 
 ## Motor nativo (wslcsdk via FFI)
 
@@ -209,7 +264,8 @@ src/
 │       ├── logger.ts            # Sistema de logs: ring buffer + arquivo rotacionado + evento
 │       └── wslc/
 │           ├── service.ts       # Interface WslcService
-│           ├── real.ts          # Implementação real (wslc.exe; list/stats via --format json)
+│           ├── real.ts          # Implementação real (wslc.exe; listas via --format json)
+│           ├── json-lines.ts    # Parser do --format json (NDJSON da 2.9.9 ou array da 2.9.4)
 │           ├── mock.ts          # Modo demonstração (WSLC_UI_MOCK=1; =setup simula sem ambiente)
 │           ├── ops.ts           # Fronteiras injetáveis: motor nativo, streams e efeitos externos
 │           ├── real-ops.ts      # Fiação das fronteiras no mundo real (FFI, spawn, shell, diálogos)
@@ -217,7 +273,9 @@ src/
 │           ├── mock-state.ts    # Ajustes do modo demo: injeção de falha, diálogos, cadência
 │           ├── cli.ts           # execFile sem shell + decodificação UTF-16LE/UTF-8
 │           ├── table.ts         # Parser de tabelas estilo docker (fallback p/ CLIs antigas)
-│           ├── run-args.ts      # Montagem dos argumentos de `wslc run` (todos os flags)
+│           ├── args.ts          # pushOpt/pushEach: flag só entra com valor não vazio
+│           ├── run-args.ts      # Argumentos de `wslc run` / `container create` (todos os flags)
+│           ├── stream-args.ts   # Argumentos de `image build` e `container logs` (montados no IPC)
 │           ├── sessions.ts      # Parser do `system session list` (cabeçalhos localizados)
 │           ├── version.ts       # Comparação de versões do WSL
 │           ├── streams.ts       # Processos de longa duração (logs -f, pull) → StreamSink
@@ -399,17 +457,17 @@ As opções da fixture (`e2e/fixtures/app.ts`) são declaradas por bloco com `te
 test.use({ engine: 'native', fail: ['volumes:create'], pick: 'cancel' })
 ```
 
-| Arquivo                   | Cobre                                                                                                                               |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `shell.spec.ts`           | Navegação, recolher o menu, botões da janela, painel de logs (filtro, limpar, ao vivo)                                              |
-| `setup.spec.ts`           | Portão de ambiente incompleto, instalação guiada (conclui, falha e sem SDK)                                                         |
-| `containers.spec.ts`      | Ciclo de vida nos dois motores, run com portas, detalhes/exec, logs, prune, e as diferenças reais (stats, export, terminal externo) |
-| `images.spec.ts`          | Pull/push com progresso, tarballs, tags, registry, catálogo e Docker Hub, build; ausências do motor nativo                          |
-| `volumes.spec.ts`         | Volumes nos dois motores, VHDX com tamanho/tipo/dono e a validação do formulário                                                    |
-| `networks.spec.ts`        | Redes, conectar/desconectar, prune confirmado e o aviso do motor nativo                                                             |
-| `system.spec.ts`          | Ambiente, sessões, troca de motor (ida e volta, persistida) e tuning da sessão nativa                                               |
-| `terminal.spec.ts`        | Terminal embutido nos dois motores (eco de linha, sem TTY)                                                                          |
-| `eventos-nativos.spec.ts` | Crash dump com o caminho do `.dmp` e o fim inesperado da sessão                                                                     |
+| Arquivo                   | Cobre                                                                                                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shell.spec.ts`           | Navegação, recolher o menu, botões da janela, painel de logs (filtro, limpar, ao vivo)                                                                                                 |
+| `setup.spec.ts`           | Portão de ambiente incompleto, instalação guiada (conclui, falha e sem SDK)                                                                                                            |
+| `containers.spec.ts`      | Ciclo de vida nos dois motores, run com portas, `container create`, cópia de arquivos, logs com recorte, detalhes/exec, prune, e as diferenças reais (stats, export, terminal externo) |
+| `images.spec.ts`          | Pull/push com progresso, tarballs, tags, registry, catálogo e Docker Hub, build (simples e avançado), remoção forçada; ausências do motor nativo                                       |
+| `volumes.spec.ts`         | Volumes nos dois motores, VHDX com tamanho/tipo/dono, labels na CLI e a validação do formulário                                                                                        |
+| `networks.spec.ts`        | Redes, faixa de IPs, conectar com alias/IP, desconectar, prune confirmado e o aviso do motor nativo                                                                                    |
+| `system.spec.ts`          | Ambiente, sessões, troca de motor (ida e volta, persistida) e tuning da sessão nativa                                                                                                  |
+| `terminal.spec.ts`        | Terminal embutido nos dois motores (eco de linha, sem TTY)                                                                                                                             |
+| `eventos-nativos.spec.ts` | Crash dump com o caminho do `.dmp` e o fim inesperado da sessão                                                                                                                        |
 
 Cada área tem um bloco de **caminhos tristes** alimentado por `WSLC_UI_MOCK_FAIL`: listagem que
 falha vira alerta na view, ação que falha vira toast com o motivo, e o diálogo que falhou continua

@@ -5,9 +5,15 @@
  * Por que existe um script separado do `cenario-demo.ps1`: os dois motores têm
  * STORAGE PRÓPRIO (`%LOCALAPPDATA%\wslc\sessions\…` na CLI,
  * `%LOCALAPPDATA%\wslc-ui\native-session\` no nativo). Nada que a CLI cria
- * aparece no motor nativo, e o `wslc.exe` não tem como endereçar a sessão do app
- * (não há flag de sessão em `list`/`run`) — a única porta de entrada do storage
- * nativo é o próprio SDK.
+ * aparece na sessão do outro.
+ *
+ * CORREÇÃO (2.9.9): a CLI TEM como endereçar a sessão do app — a opção global
+ * `--session <nome>` existe, e `wslc --session WslcUi volume list` devolve os
+ * VHDX que a UI criou (regra 19 do ROADMAP). Mas ela só alcança uma sessão
+ * VIVA, ou seja, com o app aberto — que é justamente o que impede este script
+ * de rodar (o SDK aceita um processo por sessão). Por isso o caminho aqui
+ * continua sendo o SDK: é o único que funciona com o app FECHADO, que é quando
+ * semear faz sentido.
  *
  * POR QUE NÃO DÁ PARA SEMEAR CONTAINERS NATIVOS POR FORA (medido, não suposto):
  * o SDK preview não enumera containers. O app mantém um `registry` EM MEMÓRIA

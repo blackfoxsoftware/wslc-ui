@@ -22,7 +22,7 @@ describe('useVolumesStore', () => {
     })
     const ok = await useVolumesStore.getState().create('novo')
     expect(ok).toBe(true)
-    expect(api.createVolume).toHaveBeenCalledWith('novo', undefined)
+    expect(api.createVolume).toHaveBeenCalledWith('novo', undefined, undefined)
     expect(useVolumesStore.getState().volumes).toHaveLength(1)
     expect(toast.success).toHaveBeenCalledWith('Volume "novo" criado.')
   })
@@ -31,7 +31,7 @@ describe('useVolumesStore', () => {
     const api = installWslcApiMock()
     const vhd = { sizeMb: 256, fixed: true, owner: { uid: 1000, gid: 1000 } }
     await useVolumesStore.getState().create('vhdvol', vhd)
-    expect(api.createVolume).toHaveBeenCalledWith('vhdvol', vhd)
+    expect(api.createVolume).toHaveBeenCalledWith('vhdvol', vhd, undefined)
   })
 
   it('create retorna false e emite toast de erro com o stderr', async () => {
@@ -63,8 +63,9 @@ describe('useVolumesStore', () => {
         .mockResolvedValue([])
     })
     await useVolumesStore.getState().removeAll()
-    expect(api.removeVolume).toHaveBeenCalledWith('a')
-    expect(api.removeVolume).toHaveBeenCalledWith('b')
+    // -f na remoção em massa é idempotência: a lista pode ter envelhecido.
+    expect(api.removeVolume).toHaveBeenCalledWith('a', true)
+    expect(api.removeVolume).toHaveBeenCalledWith('b', true)
     expect(toast.success).toHaveBeenCalledWith('2 volume(s) removido(s).')
   })
 })

@@ -1,6 +1,6 @@
 import type { CommandResult } from '@shared/schemas'
 import { logInfo } from '../../logger'
-import { hrHex, hrOk, Keep } from './bindings'
+import { hrText, hrOk, Keep } from './bindings'
 import { acquireNativeSession, callNative } from './session'
 
 /**
@@ -118,7 +118,7 @@ export async function loginNativeRegistry(
         ok: false,
         code: 1,
         stdout: '',
-        stderr: errOut[0] || `WslcSessionAuthenticate falhou: ${hrHex(hr)}`
+        stderr: errOut[0] || `WslcSessionAuthenticate falhou: ${hrText(hr)}`
       }
     }
     credentials.set(address, { username, password, identityToken: tokenOut[0] ?? '' })

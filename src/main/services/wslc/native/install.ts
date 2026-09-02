@@ -1,7 +1,7 @@
 import type { CommandResult, InstallProgressEvent } from '@shared/schemas'
 import { logError, logInfo } from '../../logger'
 import {
-  hrHex,
+  hrText,
   hrOk,
   loadWslcSdk,
   registerCallback,
@@ -75,7 +75,7 @@ export async function installNativeComponents(
 
     if (!hrOk(hr)) {
       const message =
-        `WslcInstallWithDependencies falhou: ${hrHex(hr)} — a instalação pode exigir ` +
+        `WslcInstallWithDependencies falhou: ${hrText(hr)} — a instalação pode exigir ` +
         'privilégios de administrador. Alternativa manual: wsl --update --pre-release'
       logError('native', 'Instalação guiada falhou', message)
       return { ok: false, code: 1, stdout: '', stderr: message }

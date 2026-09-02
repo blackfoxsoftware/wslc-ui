@@ -272,10 +272,10 @@ Nesta fase o app **encapsula a CLI `wslc.exe`** via `execFile` sem shell (imune 
 
 ### Fronteiras do processo main
 
-O app fala com o mundo por quatro portas, e **todas são injetáveis**: o serviço da CLI
-(`WslcService`), o motor nativo, os streams de longa duração e os efeitos externos (diálogos do
-Electron, shell do Windows, busca no Docker Hub). Em produção elas são a implementação real; sob
-`WSLC_UI_MOCK` viram dublês. É o que permite exercitar o app inteiro — inclusive o motor nativo —
+O app fala com o mundo por cinco portas, e **todas são injetáveis**: o serviço da CLI
+(`WslcService`), o motor nativo, os streams de longa duração, os efeitos externos (diálogos do
+Electron, shell do Windows, busca no Docker Hub) e o auto-updater. Em produção elas são a
+implementação real; sob `WSLC_UI_MOCK` viram dublês. É o que permite exercitar o app inteiro — inclusive o motor nativo —
 sem WSL, sem a `wslcsdk.dll` e sem abrir uma única janela do Windows.
 
 ## Requisitos
@@ -518,6 +518,35 @@ Os dois `.exe` sobem como assets da release. **Não são assinados**: o SmartScr
 desconhecido" e exigir _Mais informações → Executar assim mesmo_.
 
 Versão com sufixo (`0.2.0-rc.1`) sai marcada como pré-lançamento.
+
+### Atualização automática
+
+Da 0.3.0 em diante o app se atualiza sozinho a partir das releases deste repositório
+(`electron-updater` com o provedor GitHub). Quem estiver na 0.2.0 precisa instalar a 0.3.0 à mão —
+a primeira versão que recebe atualização é a primeira que já traz o updater dentro.
+
+O que o app faz depende de como ele foi instalado:
+
+| Situação                | O que acontece                                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Instalado pelo setup    | Checa ao abrir e a cada 6 h, baixa em segundo plano e **aplica quando o app fecha**. Dá para aplicar na hora pela aba Sistema. |
+| Portátil                | Checa, avisa e leva para a release. Trocar o `.exe` é de quem usa — que é o ponto de ser portátil.                             |
+| Rodando do código-fonte | Desligado: não há instalação para atualizar por cima.                                                                          |
+
+Só versões estáveis contam. Um `0.4.0-rc.1` continua publicado no GitHub, mas o updater o ignora.
+
+O que faz isso funcionar é o **`latest.yml`** que o `electron-builder` gera e o workflow anexa à
+release: é o índice que o app consulta. Sem ele, a release fica completa para quem baixa à mão e
+invisível para quem já tem o app instalado — falha silenciosa que só apareceria uma versão depois.
+Por isso o job de empacotamento **falha** se o arquivo não existir, e o teste de fumaça confere que o
+`app-update.yml` foi embutido no pacote.
+
+Instalar pela aba Sistema não é um `quitAndInstall` seco: o app encerra a sessão nativa **antes** de
+entregar o processo ao instalador. O NSIS fecha quem demora, e um processo morto assim deixa a sessão
+"WslcUi" órfã no WSL.
+
+O ciclo inteiro é exercitável sem release nenhuma: `WSLC_UI_MOCK_UPDATE=portable|disabled` escolhe o
+modo e `WSLC_UI_MOCK_FAIL=updates:check,updates:download` reproduz os dois caminhos tristes.
 
 ## Licença
 

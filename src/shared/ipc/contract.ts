@@ -25,6 +25,7 @@ import {
   streamProgressEventSchema,
   terminalDataEventSchema,
   terminalExitEventSchema,
+  updateStatusSchema,
   vhdVolumeOptionsSchema,
   volumeSchema,
   windowStateEventSchema,
@@ -179,6 +180,13 @@ export const invokeContract = {
   'system:pick-sdk': { input: z.void(), output: sdkProbeSchema.nullable() },
   'system:set-sdk-path': { input: z.object({ path: z.string().nullable() }), output: z.void() },
 
+  // Auto-updater. `check` devolve o estado JÁ com o resultado da checagem; o
+  // resto do ciclo (download, erro) chega por evento, porque leva minutos.
+  'updates:status': { input: z.void(), output: updateStatusSchema },
+  'updates:check': { input: z.void(), output: updateStatusSchema },
+  // Fecha o app e aplica a atualização já baixada. Só existe no modo instalador.
+  'updates:install': { input: z.void(), output: z.void() },
+
   'streams:stop': { input: z.object({ streamId: streamIdSchema }), output: z.void() },
 
   // Terminal embutido: shell interativo dentro do container (os dois motores).
@@ -210,7 +218,8 @@ export const eventContract = {
   'window:state': windowStateEventSchema,
   'native:session-ended': nativeSessionEndedEventSchema,
   'native:crash-dump': nativeCrashDumpEventSchema,
-  'setup:install-progress': installProgressEventSchema
+  'setup:install-progress': installProgressEventSchema,
+  'updates:status': updateStatusSchema
 } as const satisfies Record<string, z.ZodType>
 
 export type InvokeContract = typeof invokeContract

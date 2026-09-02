@@ -13,8 +13,12 @@ import type { WslcApi } from '../src/shared/ipc/api'
  * estar em `vendor/` para estar em `resources/`. Cada uma dessas três coisas
  * quebra sozinha, sem quebrar nada no E2E.
  *
- * Então este script abre o .exe de verdade e confere justamente isso: que o
- * motor nativo achou a DLL, e que ela veio de dentro do pacote.
+ * Então este script abre o .exe de verdade e confere justamente isso: que a
+ * DLL veio de dentro do pacote e que a chamada CHEGOU nela.
+ *
+ * O que ele NÃO afirma é que o motor nativo funciona — isso depende de haver
+ * WSL na máquina, e runner de CI não tem. Quem mede aquilo são os testes de
+ * integração, que só rodam onde o SDK responde (ver isNativeUsable).
  *
  *   node scripts/fumaca-empacotado.ts "dist/win-unpacked/WSLC UI.exe"
  */
@@ -42,19 +46,35 @@ try {
   console.log(JSON.stringify(status, null, 2))
 
   const problemas: string[] = []
-  if (!status.available) problemas.push(`SDK indisponível: ${status.detail}`)
+
+  // --- problemas de EMPACOTAMENTO: valem em qualquer máquina ---
+
+  if (status.dllPath === null) problemas.push('a DLL não foi encontrada dentro do pacote')
+  else if (!/resources/i.test(status.dllPath)) problemas.push(`DLL fora de resources/: ${status.dllPath}`)
   if (status.source !== 'bundled') problemas.push(`DLL veio de "${status.source}", não do pacote`)
-  if (status.dllPath !== null && !/resources/i.test(status.dllPath)) {
-    problemas.push(`DLL fora de resources/: ${status.dllPath}`)
-  }
-  if (status.abi === null) problemas.push('ABI não detectada')
+
+  // Um HRESULT na mensagem prova que a chamada CHEGOU na DLL — ou seja, o koffi
+  // carregou de fora do asar e os bindings casaram. Sem WSL a chamada falha
+  // (0x80070032, ERROR_NOT_SUPPORTED), e tudo bem; o que não pode é falhar
+  // ANTES, com erro de módulo, que aí é empacotamento quebrado.
+  const respondeu = status.available || /0x[0-9a-f]{8}/i.test(status.detail)
+  if (!respondeu) problemas.push(`o SDK sequer respondeu: ${status.detail}`)
+
+  // Se o motor nativo está de fato USÁVEL é outra pergunta, e não é desta
+  // fumaça: depende de haver WSL na máquina, coisa que runner de CI não tem.
+  // Quem mede isso são os testes de integração, que rodam onde há WSL.
 
   if (problemas.length > 0) {
     console.error(`\nFumaça falhou (${problemas.length}):`)
     for (const p of problemas) console.error(`  - ${p}`)
     process.exitCode = 1
   } else {
-    console.log(`\nOK: app empacotado abriu, DLL ${status.abi} carregada de resources/.`)
+    console.log(
+      `\nOK: app empacotado abriu e alcançou a DLL em resources/.` +
+        (status.available
+          ? ` Motor nativo disponível, ABI ${status.abi}.`
+          : ` Motor nativo não exercitável aqui: ${status.detail}`)
+    )
   }
 } finally {
   await app.close().catch(() => undefined)
